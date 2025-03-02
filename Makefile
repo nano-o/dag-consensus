@@ -13,6 +13,9 @@ $(JAR):
 # Don't redownload
 .PRECIOUS: $(JAR)
 
+%.pdf: %.tla
+	java -cp tla2tools.jar tla2tex.TLA -shade -ps -latexCommand pdflatex $<
+
 trans: $(JAR) $(TLA_SPEC)
 	@if [ -z "$(TLA_SPEC)" ]; then \
 	  echo "Error: TLA_SPEC is not set. Use make run-tlc TLA_SPEC=YourSpec.tla"; \

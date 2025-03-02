@@ -1,5 +1,11 @@
 ----------------------------- MODULE DAGConsensus -----------------------------
 
+(**************************************************************************************)
+(* Specification of a very simple DAG-based BFT consensus protocol.                   *)
+(*                                                                                    *)
+(* Model-checking with TLC seems intractable beyond 4 rounds.                         *)
+(**************************************************************************************)
+
 EXTENDS FiniteSets, Integers
 
 CONSTANTS
@@ -9,13 +15,6 @@ CONSTANTS
 ,   Leader(_) \* operator mapping each round to its leader
 
 ASSUME \E n \in R : R = 0..n
-
-\* Let's order the nodes arbitrarily:
-NodeSeq == CHOOSE s \in [1..Cardinality(N) -> N] :
-    \A i,j \in 1..Cardinality(N) : i # j => s[i] # s[j]
-
-\* Example assignment of leaders to rounds (changes every 2 rounds):
-ModLeader(r) == NodeSeq[((r \div 2) % Cardinality(N))+1]
 
 \* DAG vertices are just pairs consisting of a node and a round:
 V == N \times R
@@ -35,11 +34,10 @@ Children(v, digraph) ==
 RECURSIVE Reachable(_,_,_)
 Reachable(v1, v2, dag) ==
     \/  v1 = v2
-    \/  v2 \in Children(v1, dag)
     \/  \E c \in Children(v1, dag) : Reachable(c, v2, dag)
 
 Parents(v, digraph) ==
-    {p \in Vertices(digraph) : <<p,v>> \in digraph}
+    {e[1] : e \in {e \in digraph : e[2] = v}}
 
 (*--algorithm DAGConsensus {
     variables
@@ -56,7 +54,7 @@ Parents(v, digraph) ==
                 /\  Committed(v1)
                 /\  Committed(v2)
                 /\  Round(v1) <= Round(v2)
-                => Reachable(v2,v1,es)
+                =>  Reachable(v2, v1, es)
     }
     process (node \in N)
         variables
@@ -86,8 +84,6 @@ l0:     while (TRUE)
 }
 *)
 
-Max(S) == CHOOSE x \in S : \A y \in S : y <= x
-
 TypeOK ==
     /\  vs \subseteq V
     /\  \A e \in es :
@@ -98,8 +94,20 @@ TypeOK ==
         /\  round[n] \in Nat
         /\  delivered[n] \subseteq vs
 
+(**************************************************************************************)
+(* Model-checking stuff:                                                              *)
+(**************************************************************************************)
+
+\* To define leaders, let's first order the nodes arbitrarily:
+NodeSeq == CHOOSE s \in [1..Cardinality(N) -> N] :
+    \A i,j \in 1..Cardinality(N) : i # j => s[i] # s[j]
+
+\* Example assignment of leaders to rounds (changes every 2 rounds):
+ModLeader(r) == NodeSeq[((r \div 2) % Cardinality(N))+1]
+
 StateConstraint ==
-    \A n \in N : round[n] \in 0..(Max(R)+1)
+    LET Max(S) == CHOOSE x \in S : \A y \in S : y <= x IN
+        \A n \in N : round[n] \in 0..(Max(R)+1)
 
 Falsy1 == \neg (
     \E v1,v2 \in vs :
