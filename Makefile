@@ -1,9 +1,9 @@
 JAR=tla2tools.jar
 JAR_URL=https://github.com/tlaplus/tlaplus/releases/download/v1.8.0/$(JAR)
 TLC_WORKERS=16
-TLC_OFFHEAP_MEMORY=4G
-TLC_HEAP=2G
-TLC_CMD=java -Xmx${TLC_HEAP} -XX:+UseParallelGC -XX:MaxDirectMemorySize=${TLC_OFFHEAP_MEMORY} -Dtlc2.tool.fp.FPSet.impl=tlc2.tool.fp.OffHeapDiskFPSet -Dtlc2.tool.ModelChecker.BAQueue=true -jar tla2tools.jar -workers ${TLC_WORKERS} -checkpoint 30
+TLC_OFFHEAP_MEMORY=40G
+TLC_HEAP=10G
+TLC_CMD=java -Xmx${TLC_HEAP} -XX:+UseParallelGC -XX:MaxDirectMemorySize=${TLC_OFFHEAP_MEMORY} -Dtlc2.tool.fp.FPSet.impl=tlc2.tool.fp.OffHeapDiskFPSet -Dtlc2.tool.ModelChecker.BAQueue=true -jar tla2tools.jar -workers ${TLC_WORKERS} -checkpoint 30 -deadlock
 TLA_SPEC?=
 
 # Download the JAR if it does not exist
