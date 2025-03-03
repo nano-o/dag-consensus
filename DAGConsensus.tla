@@ -3,7 +3,7 @@
 (**************************************************************************************)
 (* Specification of a very simple DAG-based BFT consensus protocol.                   *)
 (*                                                                                    *)
-(* Model-checking with TLC seems intractable beyond 4 rounds.                         *)
+(* Model-checking with TLC seems intractable beyond 3 rounds.                         *)
 (**************************************************************************************)
 
 EXTENDS FiniteSets, Integers
@@ -46,9 +46,9 @@ Parents(v, digraph) ==
     define {
         Committed(v) ==
             /\  v \in vs
-            /\  Node(v) = Leader(Round(v))
             /\  Round(v) % 2 = 0
-            /\ {Node(p) : p \in Parents(v, es)} \in Quorum
+            /\  Node(v) = Leader(Round(v))
+            /\  {Node(p) : p \in Parents(v, es)} \in Quorum
         Correctness ==
             \A v1,v2 \in vs :
                 /\  Committed(v1)
