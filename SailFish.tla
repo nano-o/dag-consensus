@@ -23,14 +23,13 @@ l0:     while (TRUE)
         }
         or {
             \* create a new vertice
+            with (v = <<self, round>>)
             if (round = 0)
-                vs := vs \cup {<<self, round>>}
+                vs := vs \cup {v}
             else with (prev = {v \in delivered : Round(v) = round-1}) {
                 when ({Node(p) : p \in prev} \in Quorum);
-                with (v = <<self, round>>) {
-                    vs := vs \cup {v};
-                    es := es \cup {<<v, p>> : p \in prev}
-                };
+                vs := vs \cup {v};
+                es := es \cup {<<v, p>> : p \in prev}
                 if (LeaderVertice(round-1) \notin prev)
                     no_vote := no_vote \cup {LeaderVertice(round-1)}
             };

@@ -11,7 +11,7 @@ EXTENDS DomainModel
 (*--algorithm DAGConsensus {
     variables
         vs = {}, \* the vertices of the DAG
-        es = {} \* the edges of the DAG
+        es = {}; \* the edges of the DAG
     define {
         Committed(v) ==
             /\  v \in vs
@@ -38,14 +38,13 @@ l0:     while (TRUE)
         }
         or {
             \* create a new vertice
+            with (v = <<self, round>>)
             if (round = 0)
-                vs := vs \cup {<<self, round>>}
+                vs := vs \cup {v}
             else with (prev = {v \in delivered : Round(v) = round-1}) {
                 when ({Node(p) : p \in prev} \in Quorum);
-                with (v = <<self, round>>) {
-                    vs := vs \cup {v};
-                    es := es \cup {<<v, p>> : p \in prev}
-                }
+                vs := vs \cup {v};
+                es := es \cup {<<v, p>> : p \in prev}
             };
             round := round + 1
         }
