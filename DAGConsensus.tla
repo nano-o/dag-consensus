@@ -56,10 +56,10 @@ l0:     while (TRUE) {
 *)
 
 TypeOK ==
-    /\  vs \subseteq V
+    /\  \A v \in vs : Node(v) \in N /\ Round(v) \in Nat
     /\  \A e \in es :
             /\  e = <<e[1],e[2]>>
-            /\  {e[1], e[2]} \subseteq V
+            /\  {e[1], e[2]} \subseteq vs
             /\  Round(e[1]) > Round(e[2])
     /\  \A n \in N : round[n] \in Nat
 

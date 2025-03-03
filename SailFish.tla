@@ -15,21 +15,22 @@ EXTENDS DomainModel
             delivered = {}, \* delivered DAG vertices
             no_vote = {}; \* set of leader vertices not voted for
     {
-l0:     while (TRUE)
-        either {
-            \* deliver a vertice
-            with (v \in vs \ delivered)
-            delivered := delivered \cup {v}
-        }
-        or {
-            \* create a new vertice
+l0:     while (TRUE) {
+            \* some actions commute, and we can sequentialize the execution as follows:
+            when (round > 0 => \A n \in N : <<n, round-1>> \in vs);
+            when (\A n \in N : NodeIndex(n) < NodeIndex(self) =>
+                <<n, round>> \in vs);
+            \* end sequentialization
+
+            \* add a new vertex to the DAG:
             with (v = <<self, round>>)
             if (round = 0)
                 vs := vs \cup {v}
-            else with (prev = {v \in delivered : Round(v) = round-1}) {
-                when ({Node(p) : p \in prev} \in Quorum);
+            else with (prev \in {prev \in SUBSET vs :
+                    /\  \A pv \in prev : Round(pv) = round-1
+                    /\  {Node(pv) : pv \in prev} \in Quorum}) {
                 vs := vs \cup {v};
-                es := es \cup {<<v, p>> : p \in prev}
+                es := es \cup {<<v, pv>> : pv \in prev};
                 if (LeaderVertice(round-1) \notin prev)
                     no_vote := no_vote \cup {LeaderVertice(round-1)}
             };
@@ -53,10 +54,10 @@ Correctness ==
         =>  Reachable(v2, v1, es)
 
 TypeOK ==
-    /\  vs \subseteq V
+    /\  \A v \in vs : Node(v) \in N /\ Round(v) \in Nat
     /\  \A e \in es :
             /\  e = <<e[1],e[2]>>
-            /\  {e[1], e[2]} \subseteq V
+            /\  {e[1], e[2]} \subseteq vs
             /\  Round(e[1]) > Round(e[2])
     /\  \A n \in N :
         /\  round[n] \in Nat
@@ -66,10 +67,6 @@ TypeOK ==
 (**************************************************************************************)
 (* Model-checking stuff:                                                              *)
 (**************************************************************************************)
-
-\* To define leaders, let's first order the nodes arbitrarily:
-NodeSeq == CHOOSE s \in [1..Cardinality(N) -> N] :
-    \A i,j \in 1..Cardinality(N) : i # j => s[i] # s[j]
 
 \* Example assignment of leaders to rounds:
 ModLeader(r) == NodeSeq[(r % Cardinality(N))+1]
