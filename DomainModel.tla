@@ -37,4 +37,10 @@ Reachable(v1, v2, dag) ==
 Parents(v, digraph) ==
     {e[1] : e \in {e \in digraph : e[2] = v}}
 
+\* An arbitrary ordering of the nodes:
+NodeSeq == CHOOSE s \in [1..Cardinality(N) -> N] :
+    \A i,j \in 1..Cardinality(N) : i # j => s[i] # s[j]
+
+NodeIndex(n) == CHOOSE i \in 1..Cardinality(N) : NodeSeq[i] = n
+
 ==============================================================================

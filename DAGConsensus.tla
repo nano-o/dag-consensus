@@ -1,9 +1,11 @@
 ----------------------------- MODULE DAGConsensus -----------------------------
 
 (**************************************************************************************)
-(* Specification of a very simple DAG-based BFT consensus protocol.                   *)
+(* Specification, at a high level of abstraction, of a very simple DAG-based BFT      *)
+(* consensus protocol.                                                                *)
 (*                                                                                    *)
-(* Model-checking with TLC seems intractable beyond 3 rounds.                         *)
+(* Model-checking with TLC seems intractable beyond 4 rounds, even with               *)
+(* sequentialization.                                                                 *)
 (**************************************************************************************)
 
 EXTENDS DomainModel
@@ -18,34 +20,35 @@ EXTENDS DomainModel
             /\  Round(v) % 2 = 0
             /\  Node(v) = Leader(Round(v))
             /\  {Node(p) : p \in Parents(v, es)} \in Quorum
-        Correctness ==
-            \A v1,v2 \in vs :
-                /\  Committed(v1)
-                /\  Committed(v2)
-                /\  Round(v1) <= Round(v2)
-                =>  Reachable(v2, v1, es)
+        Correctness == \A v1,v2 \in vs :
+            /\  Committed(v1)
+            /\  Committed(v2)
+            /\  Round(v1) <= Round(v2)
+            =>  Reachable(v2, v1, es)
     }
     process (node \in N)
         variables
             round = 0; \* current round
-            delivered = {}; \* delivered DAG vertices
     {
-l0:     while (TRUE)
-        either {
-            \* deliver a vertice
-            with (v \in vs \ delivered)
-            delivered := delivered \cup {v}
-        }
-        or {
-            \* create a new vertice
+l0:     while (TRUE) {
+            \* some actions commute, and we can sequentialize the execution as follows:
+            when (round > 0 => \A n \in N : <<n, round-1>> \in vs);
+            when (\A n \in N : NodeIndex(n) < NodeIndex(self) =>
+                <<n, round>> \in vs);
+            \* end sequentialization
+
+            \* add a new vertex to the DAG:
             with (v = <<self, round>>)
             if (round = 0)
                 vs := vs \cup {v}
-            else with (prev = {v \in delivered : Round(v) = round-1}) {
-                when ({Node(p) : p \in prev} \in Quorum);
+            else
+            with (prev \in {prev \in SUBSET vs :
+                    /\  \A pv \in prev : Round(pv) = round-1
+                    /\  {Node(pv) : pv \in prev} \in Quorum}) {
                 vs := vs \cup {v};
-                es := es \cup {<<v, p>> : p \in prev}
+                es := es \cup {<<v, pv>> : pv \in prev}
             };
+            \* go to the next round
             round := round + 1
         }
     }
@@ -58,17 +61,11 @@ TypeOK ==
             /\  e = <<e[1],e[2]>>
             /\  {e[1], e[2]} \subseteq V
             /\  Round(e[1]) > Round(e[2])
-    /\  \A n \in N :
-        /\  round[n] \in Nat
-        /\  delivered[n] \subseteq vs
+    /\  \A n \in N : round[n] \in Nat
 
 (**************************************************************************************)
 (* Model-checking stuff:                                                              *)
 (**************************************************************************************)
-
-\* To define leaders, let's first order the nodes arbitrarily:
-NodeSeq == CHOOSE s \in [1..Cardinality(N) -> N] :
-    \A i,j \in 1..Cardinality(N) : i # j => s[i] # s[j]
 
 \* Example assignment of leaders to rounds (changes every 2 rounds):
 ModLeader(r) == NodeSeq[((r \div 2) % Cardinality(N))+1]
@@ -85,7 +82,7 @@ Falsy1 == \neg (
 )
 
 Falsy2 == \neg (
-    \E v \in vs : Round(v) # 0 /\ Committed(v)
+    Committed(<<Leader(2), 2>>)
 )
 
 ===========================================================================
