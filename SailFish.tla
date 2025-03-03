@@ -140,6 +140,7 @@ TypeOK ==
     /\  \A n \in N :
         /\  round[n] \in Nat
         /\  delivered[n] \subseteq vs
+        /\  no_vote[n] \subseteq {<<Leader(r),r>> : r \in R}
 
 (**************************************************************************************)
 (* Model-checking stuff:                                                              *)
@@ -149,8 +150,8 @@ TypeOK ==
 NodeSeq == CHOOSE s \in [1..Cardinality(N) -> N] :
     \A i,j \in 1..Cardinality(N) : i # j => s[i] # s[j]
 
-\* Example assignment of leaders to rounds (changes every 2 rounds):
-ModLeader(r) == NodeSeq[((r \div 2) % Cardinality(N))+1]
+\* Example assignment of leaders to rounds:
+ModLeader(r) == NodeSeq[(r % Cardinality(N))+1]
 
 StateConstraint ==
     LET Max(S) == CHOOSE x \in S : \A y \in S : y <= x IN
