@@ -1,11 +1,16 @@
------------------------------ MODULE SailFish -----------------------------
+----------------------------- MODULE Sailfish1 -----------------------------
+
+(**************************************************************************************)
+(* Specification of the Sailfish consensus algorithm at a high level of               *)
+(* abstraction.                                                                       *)
+(**************************************************************************************)
 
 EXTENDS DomainModel, TLC
 
 CONSTANT
     GST \* the first synchronous round (all later rounds are synchronous)
 
-(*--algorithm SailFish {
+(*--algorithm Sailfish {
     variables
         vs = {}, \* the vertices of the DAG
         es = {}, \* the edges of the DAG

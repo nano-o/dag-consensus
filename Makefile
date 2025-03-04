@@ -23,6 +23,7 @@ trans: $(JAR) $(TLA_SPEC)
 	fi
 	java -cp $(JAR) pcal.trans -nocfg $(TLA_SPEC)
 
+
 run-tlc: $(JAR) $(TLA_SPEC)
 	@if [ -z "$(TLA_SPEC)" ]; then \
 	  echo "Error: TLA_SPEC is not set. Use make run-tlc TLA_SPEC=YourSpec.tla"; \
