@@ -28,8 +28,8 @@ l0:     while (TRUE)
             with (vq \in VerticeQuorums(round-1)) {
                 \* from GST onwards, each node receives all correct vertices of the previous round:
                 when round >= GST => (N \ B) \subseteq {Node(v2) : v2 \in vq};
-                es := es \cup {<<v, pv>> : pv \in vq};
-                if (LeaderVertice(round-1) \notin vq)
+                es := es \cup {<<v, pv>> : pv \in vq}; \* add the edges
+                if (LeaderVertice(round-1) \notin vq) \* send no_vote if previous leader vertice not included
                     no_vote[self] := no_vote[self] \cup {LeaderVertice(round-1)}
             };
             round := round + 1
