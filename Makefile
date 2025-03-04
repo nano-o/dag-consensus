@@ -14,7 +14,7 @@ $(JAR):
 .PRECIOUS: $(JAR)
 
 %.pdf: %.tla
-	java -cp tla2tools.jar tla2tex.TLA -shade -ps -latexCommand pdflatex $<
+	java -cp tla2tools.jar tla2tex.TLA -ps -latexCommand pdflatex $<
 
 trans: $(JAR) $(TLA_SPEC)
 	@if [ -z "$(TLA_SPEC)" ]; then \

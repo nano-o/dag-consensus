@@ -16,20 +16,6 @@ CONSTANT
             {VQ \in SUBSET vs :
                 /\  \A v \in VQ : Round(v) = r
                 /\  {Node(v) : v \in VQ} \in Quorum}
-        Committed(v) ==
-            /\  v \in vs
-            /\  Node(v) = Leader(Round(v))
-            /\  {Node(pv) : pv \in Parents(v, es)} \in Quorum
-            /\  \/  Round(v) = 0
-                \/  LeaderVertice(Round(v)-1) \in Children(v, es)
-                \/  \E Q \in Quorum : \A n \in Q : LeaderVertice(Round(v)-1) \in no_vote[n]
-        Safety == \A v1,v2 \in vs :
-            /\  Committed(v1)
-            /\  Committed(v2)
-            /\  Round(v1) <= Round(v2)
-            =>  Reachable(v2, v1, es)
-
-        \* See the end of the file for a definition of liveness (which cannot be stated here for technical reasons)
     }
     process (correctNode \in N \ B)
         variables round = 0; \* current round
@@ -55,10 +41,10 @@ l0:     while (TRUE)
         }
     }
 (**************************************************************************************)
-(*     This is our model of Byzantine nodes. Because the real protocol                *)
+(*     Next comes our model of Byzantine nodes. Because the real protocol             *)
 (*     disseminates DAG vertices using reliable broadcast, Byzantine nodes cannot     *)
 (*     equivocate and cannot deviate much from the protocol (lest their messages      *)
-(*     be ignored).                                                                   *)
+(*     be ignored).                                                                  *)
 (**************************************************************************************)
     process (byzantineNode \in B)
         variables round_ = 0;
@@ -83,9 +69,38 @@ l0:     while (TRUE) {
 }
 *)
 
+(**************************************************************************************)
+(* Next we define the safety and liveness properties                                  *)
+(**************************************************************************************)
+
+Committed(v) ==
+    /\  v \in vs
+    /\  Node(v) = Leader(Round(v))
+    /\  {Node(pv) : pv \in Parents(v, es)} \in Quorum
+    /\  \/  Round(v) = 0
+        \/  LeaderVertice(Round(v)-1) \in Children(v, es)
+        \/  \E Q \in Quorum : \A n \in Q :
+                LeaderVertice(Round(v)-1) \in no_vote[n]
+Safety == \A v1,v2 \in vs :
+    /\  Committed(v1)
+    /\  Committed(v2)
+    /\  Round(v1) <= Round(v2)
+    =>  Reachable(v2, v1, es)
+
+Liveness == \A r \in R :
+    /\  r >= GST
+    /\  Leader(r) \notin B
+    /\  \A n \in N \ B : round[n] > r+1
+    =>  Committed(LeaderVertice(r))
+
+(**************************************************************************************)
+(* Finally we make a few auxiliary definitions used for model-checking with TLC       *)
+(**************************************************************************************)
+
 \* The round of a node, whether Byzantine or not
 Round_(n) == IF n \in B THEN round_[n] ELSE round[n]
 
+\* Basic typing invariant:
 TypeOK ==
     /\  \A v \in vs : Node(v) \in N /\ Round(v) \in Nat
     /\  \A e \in es :
@@ -96,21 +111,11 @@ TypeOK ==
         /\  Round_(n) \in Nat
         /\  no_vote[n] \subseteq {<<Leader(r),r>> : r \in R}
 
-Liveness == \A r \in R :
-    /\  r >= GST
-    /\  Leader(r) \notin B
-    /\  \A n \in N \ B : round[n] > r+1
-    =>  Committed(LeaderVertice(r))
-
-(**************************************************************************************)
-(* Model-checking stuff:                                                              *)
-(**************************************************************************************)
-
 
 (**************************************************************************************)
 (* Sequentialization constraints, which enforce a particular ordering of the          *)
 (* actions. Because of how actions commute, the set of reachable states remains       *)
-(* unchanged.                                                                         *)
+(* unchanged. This speeds up model-checking a lot.                                    *)
 (**************************************************************************************)
 SeqConstraints(n) ==
     \* wait for all nodes to finish previous rounds:
@@ -125,9 +130,12 @@ SeqSpec == Init /\ [][SeqNext]_vars
 \* Example assignment of leaders to rounds:
 ModLeader(r) == NodeSeq[(r % Cardinality(N))+1]
 
+\* Constraint to stop the model checker:
 StateConstraint ==
     LET Max(S) == CHOOSE x \in S : \A y \in S : y <= x IN
         \A n \in N : Round_(n) \in 0..(Max(R)+1)
+
+\* Some properties we expect to be violated:
 
 Falsy1 == \neg (
     /\ Committed(<<Leader(1),1>>)
