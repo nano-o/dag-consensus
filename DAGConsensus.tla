@@ -15,6 +15,10 @@ EXTENDS DomainModel
         vs = {}, \* the vertices of the DAG
         es = {}; \* the edges of the DAG
     define {
+        VerticeQuorums(r) ==
+            {VQ \in SUBSET vs :
+                /\  \A v \in VQ : Round(v) = r
+                /\  {Node(v) : v \in VQ} \in Quorum}
         Committed(v) ==
             /\  v \in vs
             /\  Round(v) % 2 = 0
@@ -31,25 +35,19 @@ EXTENDS DomainModel
             round = 0; \* current round
     {
 l0:     while (TRUE) {
-            \* some actions commute, and we can sequentialize the execution as follows:
-            when (round > 0 => \A n \in N : <<n, round-1>> \in vs);
-            when (\A n \in N : NodeIndex(n) < NodeIndex(self) =>
-                <<n, round>> \in vs);
-            \* end sequentialization
-
-            \* add a new vertex to the DAG:
-            with (v = <<self, round>>)
-            if (round = 0)
-                vs := vs \cup {v}
-            else
-            with (prev \in {prev \in SUBSET vs :
-                    /\  \A pv \in prev : Round(pv) = round-1
-                    /\  {Node(pv) : pv \in prev} \in Quorum}) {
+            either with (v = <<self, round>>) {
+                \* add a new vertex to the DAG and go to the next round:
                 vs := vs \cup {v};
-                es := es \cup {<<v, pv>> : pv \in prev}
-            };
-            \* go to the next round
-            round := round + 1
+                if (round > 0)
+                    with (vq \in VerticeQuorums(round-1))
+                    es := es \cup {<<v, pv>> : pv \in vq};
+                round := round + 1
+            }
+            or {
+                \* join a higher round
+                with (r \in {r \in R : r > round})
+                    round := r
+            }
         }
     }
 }
@@ -66,6 +64,20 @@ TypeOK ==
 (**************************************************************************************)
 (* Model-checking stuff:                                                              *)
 (**************************************************************************************)
+
+(**************************************************************************************)
+(* Sequentialization constraints, which enforce a particular ordering of the          *)
+(* actions. Because of how actions commute, the set of reachable states remains       *)
+(* unchanged.                                                                         *)
+(**************************************************************************************)
+SeqConstraints(n) ==
+    \* wait for all nodes to finish previous rounds:
+    /\ (round[n] > 0 => \A n2 \in N : round[n2] >= round[n])
+    \* wait for all nodes with lower index to leave the round:
+    /\ \A n2 \in N : NodeIndex(n2) < NodeIndex(n) => round[n2] > round[n]
+
+SeqNext == (\E self \in N: SeqConstraints(self) /\ node(self))
+SeqSpec == Init /\ [][SeqNext]_vars
 
 \* Example assignment of leaders to rounds (changes every 2 rounds):
 ModLeader(r) == NodeSeq[((r \div 2) % Cardinality(N))+1]

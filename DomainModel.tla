@@ -8,6 +8,7 @@ EXTENDS FiniteSets, Integers
 
 CONSTANTS
     N \* The set of nodes
+,   B \* Byzantine nodes
 ,   R \* set of rounds
 ,   Quorum \* The set of quorums
 ,   Leader(_) \* operator mapping each round to its leader
