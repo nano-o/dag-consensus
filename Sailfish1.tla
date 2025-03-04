@@ -1,8 +1,11 @@
 ----------------------------- MODULE Sailfish1 -----------------------------
 
 (**************************************************************************************)
-(* Specification of the Sailfish consensus algorithm at a high level of               *)
-(* abstraction.                                                                       *)
+(* Specification of the a variant of the Sailfish consensus algorithm at a high       *)
+(* level of abstraction.                                                              *)
+(*                                                                                    *)
+(* In this variant, a leader vertice is commited only when it has a quorum (e.g.      *)
+(* 2f+1) of DAG parents in the next round.                                            *)
 (**************************************************************************************)
 
 EXTENDS DomainModel, TLC
