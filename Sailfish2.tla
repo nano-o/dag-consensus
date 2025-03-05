@@ -37,8 +37,8 @@ l0:     while (TRUE)
                 \* from GST onwards, each node receives all correct vertices of the previous round:
                 when round >= GST => (N \ F) \subseteq {Node(v2) : v2 \in vq};
                     if (Leader(round) = self)
-                        \* we must either we include the previous leader vertices,
-                        \* or there is a quorum of no_vote messages:
+                        \* we must either include the previous leader vertice,
+                        \* or a quorum of no_vote messages:
                         when LeaderVertice(round-1) \in vq
                             \/ \E Q \in Quorum : \A n \in Q : LeaderVertice(round-1) \in no_vote[n];
                     es := es \cup {<<v, pv>> : pv \in vq}; \* add the edges
@@ -69,8 +69,8 @@ l0:     while (TRUE) {
                 if (round_ > 0)
                 with (vq \in VerticeQuorums(round_-1)) {
                     if (Leader(round_) = self)
-                        \* we must either we include the previous leader vertices,
-                        \* or there is a quorum of no_vote messages:
+                        \* we must either include the previous leader vertice,
+                        \* or a quorum of no_vote messages:
                         when LeaderVertice(round_-1) \in vq
                             \/ \E Q \in Quorum : \A n \in Q : LeaderVertice(round_-1) \in no_vote[n];
                     es := es \cup {<<v, pv>> : pv \in vq}
