@@ -36,12 +36,14 @@ l0:     while (TRUE)
             with (vq \in VerticeQuorums(round-1)) {
                 \* from GST onwards, each node receives all correct vertices of the previous round:
                 when round >= GST => (N \ F) \subseteq {Node(v2) : v2 \in vq};
-                    if (Leader(round) = self)
-                        \* we must either include the previous leader vertice,
-                        \* or a quorum of no_vote messages:
-                        when LeaderVertice(round-1) \in vq
-                            \/ \E Q \in Quorum : \A n \in Q : LeaderVertice(round-1) \in no_vote[n];
-                    es := es \cup {<<v, pv>> : pv \in vq}; \* add the edges
+                if (Leader(round) = self) {
+                    \* we must either include the previous leader vertice,
+                    \* or a quorum of no_vote messages.
+                    when
+                        \/ LeaderVertice(round-1) \in vq
+                        \/ \E Q \in Quorum : \A n \in Q \ {self} : LeaderVertice(round-1) \in no_vote[n];
+                };
+                es := es \cup {<<v, pv>> : pv \in vq}; \* add the edges
                 if (LeaderVertice(round-1) \notin vq) \* send no_vote if previous leader vertice not included
                     no_vote[self] := no_vote[self] \cup {LeaderVertice(round-1)}
             };
@@ -68,11 +70,6 @@ l0:     while (TRUE) {
                 vs := vs \cup {v};
                 if (round_ > 0)
                 with (vq \in VerticeQuorums(round_-1)) {
-                    if (Leader(round_) = self)
-                        \* we must either include the previous leader vertice,
-                        \* or a quorum of no_vote messages:
-                        when LeaderVertice(round_-1) \in vq
-                            \/ \E Q \in Quorum : \A n \in Q : LeaderVertice(round_-1) \in no_vote[n];
                     es := es \cup {<<v, pv>> : pv \in vq}
                 }
             } or skip;
@@ -95,7 +92,7 @@ l0:     while (TRUE) {
 Committed(v) ==
     /\  v \in vs
     /\  Node(v) = Leader(Round(v))
-    /\  \E Bl \in Blocking : Bl \subseteq {Node(pv) : pv \in Parents(v, es)}
+    /\  \E Q \in Quorum : Q \subseteq {Node(pv) : pv \in Parents(v, es)}
     /\  \/  Round(v) = 0
         \/  LeaderVertice(Round(v)-1) \in Children(v, es)
         \/  \E Q \in Quorum : \A n \in Q :
@@ -139,12 +136,16 @@ TypeOK ==
 (* Sequentialization constraints, which enforce a particular ordering of the          *)
 (* actions. Because of how actions commute, the set of reachable states remains       *)
 (* unchanged. This speeds up model-checking a lot.                                    *)
+(*                                                                                    *)
+(* Compared to the Sailfish1 specification, we must always schedule the leader        *)
+(* last because, due to its use of no_vote messages of other nodes, its action        *)
+(* does not commute to the left of the actions of other nodes.                        *)
 (**************************************************************************************)
 SeqConstraints(n) ==
     \* wait for all nodes to finish previous rounds:
     /\ (Round_(n) > 0 => \A n2 \in N : Round_(n2) >= Round_(n))
-    \* wait for all nodes with lower index to leave the round:
-    /\ \A n2 \in N : NodeIndex(n2) < NodeIndex(n) => Round_(n2) > Round_(n)
+    \* wait for all nodes with lower index to leave the round (leader index is always last):
+    /\ \A n2 \in N : NodeIndexLeaderLast(n2, Round_(n)) < NodeIndexLeaderLast(n, Round_(n)) => Round_(n2) > Round_(n)
 
 SeqNext == (\E self \in N \ F: SeqConstraints(self) /\ correctNode(self))
            \/ (\E self \in F: SeqConstraints(self) /\ byzantineNode(self))
@@ -169,6 +170,13 @@ Falsy2 == \neg (
     /\ \neg Committed(<<Leader(1),1>>)
     /\ \neg Committed(<<Leader(2),2>>)
     /\ Committed(<<Leader(3),3>>)
+)
+
+Falsy3 == \neg (
+    /\  Committed(LeaderVertice(0))
+    /\  \E Q \in Quorum : \A n \in Q : LeaderVertice(0) \in no_vote[n]
+    /\  round[Leader(1)] > 1
+    /\  <<LeaderVertice(1),LeaderVertice(0)>> \notin es
 )
 
 ===========================================================================

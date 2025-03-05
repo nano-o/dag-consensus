@@ -42,7 +42,12 @@ Parents(v, digraph) ==
 \* An arbitrary ordering of the nodes:
 NodeSeq == CHOOSE s \in [1..Cardinality(N) -> N] :
     \A i,j \in 1..Cardinality(N) : i # j => s[i] # s[j]
-
 NodeIndex(n) == CHOOSE i \in 1..Cardinality(N) : NodeSeq[i] = n
+
+\* An arbitrary ordering of the nodes with the leader last:
+NodeSeqLeaderLast(r) == CHOOSE s \in [1..Cardinality(N) -> N] :
+    /\  s[Cardinality(N)] = Leader(r)
+    /\  \A i,j \in 1..Cardinality(N) : i # j => s[i] # s[j]
+NodeIndexLeaderLast(n, r) == CHOOSE i \in 1..Cardinality(N) : NodeSeqLeaderLast(r)[i] = n
 
 ==============================================================================
