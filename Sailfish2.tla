@@ -5,14 +5,13 @@
 (* abstraction.                                                                       *)
 (*                                                                                    *)
 (* Compared to the Sailfish1 specification, we additionally model committing with     *)
-(* just f+1 parents, as in the Sailfish paper.                                        *)
+(* just f+1 parents, as is possible in the Sailfish paper.                            *)
 (**************************************************************************************)
 
 EXTENDS DomainModel, TLC
 
 CONSTANT
     GST \* the first synchronous round (all later rounds are synchronous)
-,   Blocking \* Blocking sets (intersect all quorums; e.g. f+1 nodes)
 
 (*--algorithm Sailfish {
     variables
@@ -26,7 +25,7 @@ CONSTANT
                 /\  \A v \in VQ : Round(v) = r
                 /\  {Node(v) : v \in VQ} \in Quorum}
     }
-    process (correctNode \in N \ B)
+    process (correctNode \in N \ F)
         variables round = 0; \* current round
     {
 l0:     while (TRUE)
@@ -36,7 +35,7 @@ l0:     while (TRUE)
             if (round > 0)
             with (vq \in VerticeQuorums(round-1)) {
                 \* from GST onwards, each node receives all correct vertices of the previous round:
-                when round >= GST => (N \ B) \subseteq {Node(v2) : v2 \in vq};
+                when round >= GST => (N \ F) \subseteq {Node(v2) : v2 \in vq};
                     if (Leader(round) = self)
                         \* we must either we include the previous leader vertices,
                         \* or there is a quorum of no_vote messages:
@@ -50,7 +49,7 @@ l0:     while (TRUE)
         }
         or with (r \in {r \in R : r > round}) {
             \* go to a higher round
-            when round < GST; \* from GST onwards, correct nodes do not skip rounds
+            when r <= GST; \* from GST onwards, correct nodes do not skip rounds
             round := r
         }
     }
@@ -60,7 +59,7 @@ l0:     while (TRUE)
 (*     equivocate and cannot deviate much from the protocol (lest their messages      *)
 (*     be ignored).                                                                  *)
 (**************************************************************************************)
-    process (byzantineNode \in B)
+    process (byzantineNode \in F)
         variables round_ = 0;
     {
 l0:     while (TRUE) {
@@ -96,7 +95,7 @@ l0:     while (TRUE) {
 Committed(v) ==
     /\  v \in vs
     /\  Node(v) = Leader(Round(v))
-    /\  {Node(pv) : pv \in Parents(v, es)} \in Blocking
+    /\  \E Bl \in Blocking : Bl \subseteq {Node(pv) : pv \in Parents(v, es)}
     /\  \/  Round(v) = 0
         \/  LeaderVertice(Round(v)-1) \in Children(v, es)
         \/  \E Q \in Quorum : \A n \in Q :
@@ -109,16 +108,20 @@ Safety == \A v1,v2 \in vs :
 
 Liveness == \A r \in R :
     /\  r >= GST
-    /\  Leader(r) \notin B
-    /\  \A n \in N \ B : round[n] > r+1
+    /\  Leader(r) \notin F
+    \* all correct round-(r+1) vertices are created:
+    /\  \A n \in N \ F : round[n] > r+1
     =>  Committed(LeaderVertice(r))
 
 (**************************************************************************************)
 (* Finally we make a few auxiliary definitions used for model-checking with TLC       *)
 (**************************************************************************************)
 
+Quorum1 == {Q \in SUBSET N : Cardinality(Q) >= Cardinality(N) - Cardinality(F)}
+Blocking1 == {Q \in SUBSET N : Cardinality(Q) > Cardinality(F)}
+
 \* The round of a node, whether Byzantine or not
-Round_(n) == IF n \in B THEN round_[n] ELSE round[n]
+Round_(n) == IF n \in F THEN round_[n] ELSE round[n]
 
 \* Basic typing invariant:
 TypeOK ==
@@ -143,8 +146,8 @@ SeqConstraints(n) ==
     \* wait for all nodes with lower index to leave the round:
     /\ \A n2 \in N : NodeIndex(n2) < NodeIndex(n) => Round_(n2) > Round_(n)
 
-SeqNext == (\E self \in N \ B: SeqConstraints(self) /\ correctNode(self))
-           \/ (\E self \in B: SeqConstraints(self) /\ byzantineNode(self))
+SeqNext == (\E self \in N \ F: SeqConstraints(self) /\ correctNode(self))
+           \/ (\E self \in F: SeqConstraints(self) /\ byzantineNode(self))
 SeqSpec == Init /\ [][SeqNext]_vars
 
 \* Example assignment of leaders to rounds:

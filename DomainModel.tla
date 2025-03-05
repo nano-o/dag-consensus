@@ -8,9 +8,10 @@ EXTENDS FiniteSets, Integers
 
 CONSTANTS
     N \* The set of nodes
-,   B \* Byzantine nodes
+,   F \* Byzantine nodes
 ,   R \* set of rounds
-,   Quorum \* The set of quorums
+,   Quorum \* The set of quorums (e.g. cardinality >= 2f+1)
+,   Blocking \* The set of blocking set (e.g. cardinality >= f+1)
 ,   Leader(_) \* operator mapping each round to its leader
 
 ASSUME \E n \in R : R = 0..n

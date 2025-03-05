@@ -39,7 +39,7 @@ l0:     while (TRUE) {
                 \* add a new vertex to the DAG and go to the next round:
                 vs := vs \cup {v};
                 if (round > 0)
-                    with (vq \in VerticeQuorums(round-1))
+                with (vq \in VerticeQuorums(round-1))
                     es := es \cup {<<v, pv>> : pv \in vq};
                 round := round + 1
             }
