@@ -1,11 +1,8 @@
------------------------------ MODULE Sailfish2 -----------------------------
+----------------------------- MODULE Sailfish -----------------------------
 
 (**************************************************************************************)
 (* Specification of the Sailfish consensus algorithm at a high level of               *)
 (* abstraction.                                                                       *)
-(*                                                                                    *)
-(* Compared to the Sailfish1 specification, we additionally model committing with     *)
-(* just f+1 parents, as is possible in the Sailfish paper.                            *)
 (**************************************************************************************)
 
 EXTENDS DomainModel, TLC
