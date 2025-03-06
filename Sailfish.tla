@@ -129,14 +129,14 @@ TypeOK ==
         /\  no_vote[n] \subseteq {<<Leader(r),r>> : r \in R}
 
 
+Sequentialization constraints, which enforce a particular ordering of the
+actions. Because of how actions commute, the set of reachable states remains
+unchanged. This speeds up model-checking a lot.
+
 (**************************************************************************************)
-(* Sequentialization constraints, which enforce a particular ordering of the          *)
-(* actions. Because of how actions commute, the set of reachable states remains       *)
-(* unchanged. This speeds up model-checking a lot.                                    *)
-(*                                                                                    *)
-(* Compared to the Sailfish1 specification, we must always schedule the leader        *)
-(* last because, due to its use of no_vote messages of other nodes, its action        *)
-(* does not commute to the left of the actions of other nodes.                        *)
+(* Note that we must always schedule the leader last because, due to its use of       *)
+(* no_vote messages of other nodes, its action does not commute to the left of the    *)
+(* actions of other nodes.                                                            *)
 (**************************************************************************************)
 SeqConstraints(n) ==
     \* wait for all nodes to finish previous rounds:
