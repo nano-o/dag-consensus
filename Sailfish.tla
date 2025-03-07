@@ -56,7 +56,10 @@ l0:     while (TRUE)
 (*     Next comes our model of Byzantine nodes. Because the real protocol             *)
 (*     disseminates DAG vertices using reliable broadcast, Byzantine nodes cannot     *)
 (*     equivocate and cannot deviate much from the protocol (lest their messages      *)
-(*     be ignored).                                                                  *)
+(*     be ignored). Also note that creating a round-r vertice commutes to the left    *)
+(*     of actions of rounds greater than r and to the right of actions of rounds      *)
+(*     smaller than R, so we can, without loss of generality, schedule Byzantine      *)
+(*     nodes in the same "round-by-round" manner as other nodes.                      *)
 (**************************************************************************************)
     process (byzantineNode \in F)
         variables round_ = 0;
@@ -129,11 +132,12 @@ TypeOK ==
         /\  no_vote[n] \subseteq {<<Leader(r),r>> : r \in R}
 
 
-Sequentialization constraints, which enforce a particular ordering of the
-actions. Because of how actions commute, the set of reachable states remains
-unchanged. This speeds up model-checking a lot.
-
 (**************************************************************************************)
+(* Sequentialization constraints, which enforce a particular ordering of the          *)
+(* actions. Because of how actions commute, the set of reachable states remains       *)
+(* unchanged. Essentially, we schedule all nodes "round-by-round" and in lock-steps, with the leader last. *)
+(* This speeds up model-checking a lot.                                               *)
+(*                                                                                    *)
 (* Note that we must always schedule the leader last because, due to its use of       *)
 (* no_vote messages of other nodes, its action does not commute to the left of the    *)
 (* actions of other nodes.                                                            *)
