@@ -3,6 +3,35 @@
 (**************************************************************************************)
 (* Specification of the Sailfish consensus algorithm at a high level of               *)
 (* abstraction.                                                                       *)
+(*                                                                                    *)
+(* We use a number of abstractions and simplifiying assumptions:                      *)
+(*                                                                                    *)
+(* 1) Nodes read and write a global DAG. Each round, each node gets to see an         *)
+(* arbitrary quorum of vertices from the previous round (and, after GST, this         *)
+(* quorum must include all correct vertices).                                         *)
+(*                                                                                    *)
+(* 2) We do not model timeouts. Instead, before GST, nodes can                        *)
+(* non-deterministically increase their round number (inluding skipping rounds        *)
+(* entirely); after GST, correct nodes can only increment their round number and      *)
+(* only do so after acting upon a superset of the correct vertices of the previous    *)
+(* round.                                                                             *)
+(*                                                                                    *)
+(* 3) We do not model the DAG ordering procedure. Instead, we check that for every    *)
+(* two committed vertices, there is a path in the DAG from the one with the higher    *)
+(* round to the one with the lower round. Moreover, we define committed vertices      *)
+(* using the global DAG and it is plausible that local DAG views would contain        *)
+(* fewer committed vertices; so there is a potential for missing safety or            *)
+(* liveness violations because of this.                                               *)
+(*                                                                                    *)
+(* 4) We model Byzantine nodes explicitly by assigning them an algorithm. This        *)
+(* algorithm should allow Byzantine nodes to do the worst possible, but there is      *)
+(* no guarantee that this is the case. A more realistic model would allow             *)
+(* Byzantine nodes to send completely arbitrary messages at any time, but this        *)
+(* would make model-checking too hard.                                                *)
+(*                                                                                    *)
+(* 5) We do model committing based on 2f+1 first RBC messages.                        *)
+(*                                                                                    *)
+(* This version of the algorithm does not use "no_vote" messages.                     *)
 (**************************************************************************************)
 
 EXTENDS DomainModel, TLC
@@ -13,8 +42,7 @@ CONSTANT
 (*--algorithm Sailfish {
     variables
         vs = {}, \* the vertices of the DAG
-        es = {}, \* the edges of the DAG
-        no_vote = [n \in N |-> {}]; \* no_vote messages sent by each node
+        es = {}; \* the edges of the DAG
     define {
         LeaderVertice(r) == <<Leader(r), r>>
         VerticeQuorums(r) ==
@@ -30,19 +58,20 @@ l0:     while (TRUE)
             \* add a new vertex to the DAG and go to the next round
             vs := vs \cup {v};
             if (round > 0)
-            with (vq \in VerticeQuorums(round-1)) {
+            with (VQ \in VerticeQuorums(round-1)) {
+                \* TODO shouldn't we check that all vertices in vq are valid?
                 \* from GST onwards, each node receives all correct vertices of the previous round:
-                when round >= GST => (N \ F) \subseteq {Node(v2) : v2 \in vq};
+                when round >= GST => (N \ F) \subseteq {Node(v2) : v2 \in VQ};
                 if (Leader(round) = self) {
                     \* we must either include the previous leader vertice,
-                    \* or a quorum of no_vote messages.
+                    \* or a quorum of vertices not voting for the previous leader vertice
                     when
-                        \/ LeaderVertice(round-1) \in vq
-                        \/ \E Q \in Quorum : \A n \in Q \ {self} : LeaderVertice(round-1) \in no_vote[n];
+                        \/ LeaderVertice(round-1) \in VQ
+                        \/ \E Q \in Quorum : \A n \in Q \ {self} : LET vn == <<n,round>> IN
+                            /\  vn \in vs
+                            /\  <<vn, LeaderVertice(round-1)>> \notin es;
                 };
-                es := es \cup {<<v, pv>> : pv \in vq}; \* add the edges
-                if (LeaderVertice(round-1) \notin vq) \* send no_vote if previous leader vertice not included
-                    no_vote[self] := no_vote[self] \cup {LeaderVertice(round-1)}
+                es := es \cup {<<v, pv>> : pv \in VQ}; \* add the edges
             };
             round := round + 1
         }
@@ -73,11 +102,6 @@ l0:     while (TRUE) {
                     es := es \cup {<<v, pv>> : pv \in vq}
                 }
             } or skip;
-            \* maybe send a no_vote messages:
-            if (round_ > 0)
-            either
-                no_vote[self] := no_vote[self] \cup {LeaderVertice(round_-1)}
-            or skip;
             \* go to the next round:
             round_ := round_ + 1
         }
@@ -92,11 +116,13 @@ l0:     while (TRUE) {
 Committed(v) ==
     /\  v \in vs
     /\  Node(v) = Leader(Round(v))
-    /\  \E Q \in Quorum : Q \subseteq {Node(pv) : pv \in Parents(v, es)}
+    /\  \E Bl \in Blocking : Bl \subseteq {Node(pv) : pv \in Parents(v, es)}
     /\  \/  Round(v) = 0
         \/  LeaderVertice(Round(v)-1) \in Children(v, es)
-        \/  \E Q \in Quorum : \A n \in Q :
-                LeaderVertice(Round(v)-1) \in no_vote[n]
+        \/  \E Q \in Quorum : \A n \in Q : LET vn == <<n,Round(v)>> IN
+            /\  vn \in vs
+            /\  <<vn, LeaderVertice(Round(v)-1)>> \notin es
+
 Safety == \A v1,v2 \in vs :
     /\  Committed(v1)
     /\  Committed(v2)
@@ -127,20 +153,18 @@ TypeOK ==
             /\  e = <<e[1],e[2]>>
             /\  {e[1], e[2]} \subseteq vs
             /\  Round(e[1]) > Round(e[2])
-    /\  \A n \in N :
-        /\  Round_(n) \in Nat
-        /\  no_vote[n] \subseteq {<<Leader(r),r>> : r \in R}
+    /\  \A n \in N : Round_(n) \in Nat
 
 
 (**************************************************************************************)
 (* Sequentialization constraints, which enforce a particular ordering of the          *)
 (* actions. Because of how actions commute, the set of reachable states remains       *)
-(* unchanged. Essentially, we schedule all nodes "round-by-round" and in lock-steps, with the leader last. *)
-(* This speeds up model-checking a lot.                                               *)
+(* unchanged. Essentially, we schedule all nodes "round-by-round" and in              *)
+(* lock-steps, with the leader last. This speeds up model-checking a lot.             *)
 (*                                                                                    *)
 (* Note that we must always schedule the leader last because, due to its use of       *)
-(* no_vote messages of other nodes, its action does not commute to the left of the    *)
-(* actions of other nodes.                                                            *)
+(* other nodes's vertices, its action does not commute to the left of the actions     *)
+(* of other nodes.                                                                    *)
 (**************************************************************************************)
 SeqConstraints(n) ==
     \* wait for all nodes to finish previous rounds:
@@ -171,13 +195,6 @@ Falsy2 == \neg (
     /\ \neg Committed(<<Leader(1),1>>)
     /\ \neg Committed(<<Leader(2),2>>)
     /\ Committed(<<Leader(3),3>>)
-)
-
-Falsy3 == \neg (
-    /\  Committed(LeaderVertice(0))
-    /\  \E Q \in Quorum : \A n \in Q : LeaderVertice(0) \in no_vote[n]
-    /\  round[Leader(1)] > 1
-    /\  <<LeaderVertice(1),LeaderVertice(0)>> \notin es
 )
 
 ===========================================================================
