@@ -47,10 +47,22 @@ CONSTANT
         es = {}; \* the edges of the DAG
     define {
         LeaderVertice(r) == <<Leader(r), r>>
+        ValidVerticeQuorums(r) ==
+            \* Quorums of valid vertices of round r
+            {VQ \in SUBSET vs : LET NQ == {Node(v) : v \in VQ} IN
+                /\  NQ \in Quorum
+                /\  \A v \in VQ :
+                    /\  Round(v) = r
+                    \* the leader vertice, if included, must be valid (i.e. if it does not point to the previous leader vertice, then a quorum of votes must justify that):
+                    /\  \/  \neg (r > 0 /\ v = LeaderVertice(r) /\ <<v, LeaderVertice(r-1)>> \notin es)
+                        \/  \E VQ2 \in SUBSET VQ :
+                            /\  VQ2 \in Quorum
+                            /\  \A v2 \in VQ2 : <<v2, LeaderVertice(r-1)>> \notin es}
         VerticeQuorums(r) ==
-            {VQ \in SUBSET vs :
-                /\  \A v \in VQ : Round(v) = r
-                /\  {Node(v) : v \in VQ} \in Quorum}
+            \* Quorums of vertices of round r; included leader vertice may be invalid (i.e. does not point to the previous leader vertice and no quorum of votes justify that)
+            {VQ \in SUBSET vs : LET NQ == {Node(v) : v \in VQ} IN
+                /\  NQ \in Quorum
+                /\  \A v \in VQ : Round(v) = r}
     }
     process (correctNode \in N \ F)
         variables round = 0; \* current round
@@ -60,8 +72,7 @@ l0:     while (TRUE)
             \* add a new vertex to the DAG and go to the next round
             vs := vs \cup {v};
             if (round > 0)
-            with (VQ \in VerticeQuorums(round-1)) {
-                \* TODO shouldn't we check that all vertices in vq are valid?
+            with (VQ \in ValidVerticeQuorums(round-1)) {
                 \* from GST onwards, each node receives all correct vertices of the previous round:
                 when round >= GST => (N \ F) \subseteq {Node(v2) : v2 \in VQ};
                 if (Leader(round) = self) {
@@ -186,7 +197,7 @@ StateConstraint ==
     LET Max(S) == CHOOSE x \in S : \A y \in S : y <= x IN
         \A n \in N : Round_(n) \in 0..(Max(R)+1)
 
-\* Some properties we expect to be violated:
+\* Some properties we expect to be violated (useful to get the model-checker to print interesting executions):
 
 Falsy1 == \neg (
     /\ Committed(<<Leader(1),1>>)
