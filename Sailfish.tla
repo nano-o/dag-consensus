@@ -29,7 +29,7 @@
 (* Byzantine nodes to send completely arbitrary messages at any time, but this        *)
 (* would make model-checking too hard.                                                *)
 (*                                                                                    *)
-(* 5) We do model committing based on 2f+1 first RBC messages.                        *)
+(* 5) We do not explicitly model committing based on 2f+1 first RBC messages.         *)
 (*                                                                                    *)
 (* This version of the algorithm does not use "no_vote" messages.                     *)
 (**************************************************************************************)
