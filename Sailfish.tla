@@ -58,11 +58,6 @@ CONSTANT
                         \/  \E VQ2 \in SUBSET VQ :
                             /\  VQ2 \in Quorum
                             /\  \A v2 \in VQ2 : <<v2, LeaderVertice(r-1)>> \notin es}
-        VerticeQuorums(r) ==
-            \* Quorums of vertices of round r; included leader vertice may be invalid (i.e. does not point to the previous leader vertice and no quorum of votes justify that)
-            {VQ \in SUBSET vs : LET NQ == {Node(v) : v \in VQ} IN
-                /\  NQ \in Quorum
-                /\  \A v \in VQ : Round(v) = r}
     }
     process (correctNode \in N \ F)
         variables round = 0; \* current round
@@ -111,7 +106,7 @@ l0:     while (TRUE) {
             either with (v = <<self, round_>>) {
                 vs := vs \cup {v};
                 if (round_ > 0)
-                with (vq \in VerticeQuorums(round_-1)) {
+                with (vq \in ValidVerticeQuorums(round_-1)) {
                     es := es \cup {<<v, pv>> : pv \in vq}
                 }
             } or skip;
