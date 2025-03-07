@@ -16,6 +16,10 @@ CONSTANTS
 
 ASSUME \E n \in R : R = 0..n
 
+(**************************************************************************************)
+(* DAG notions                                                                        *)
+(**************************************************************************************)
+
 \* DAG vertices are just pairs consisting of a node and a round:
 V == N \times R
 Node(v) == v[1]
@@ -38,6 +42,13 @@ Reachable(v1, v2, dag) ==
 
 Parents(v, digraph) ==
     {e[1] : e \in {e \in digraph : e[2] = v}}
+
+SubDAG(vs, es) == \* vertices vs form a sub-DAG (no missing children) of DAG es
+    \A v \in vs : Children(v, es) \subseteq vs
+
+(**************************************************************************************)
+(* Other stuff                                                                        *)
+(**************************************************************************************)
 
 \* An arbitrary ordering of the nodes:
 NodeSeq == CHOOSE s \in [1..Cardinality(N) -> N] :

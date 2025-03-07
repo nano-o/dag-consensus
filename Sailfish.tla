@@ -19,11 +19,9 @@
 (* round.                                                                             *)
 (*                                                                                    *)
 (* 3) We do not model the DAG ordering procedure. Instead, we check that for every    *)
-(* two committed vertices, there is a path in the DAG from the one with the higher    *)
-(* round to the one with the lower round. Moreover, we define committed vertices      *)
-(* using the global DAG and it is plausible that local DAG views would contain        *)
-(* fewer committed vertices; so there is a potential for missing safety or            *)
-(* liveness violations because of this.                                               *)
+(* two possible views of the DAG, for every two committed vertices (one in each       *)
+(* view), there is a path in the DAG from the one with the higher round to the one    *)
+(* with the lower round.                                                              *)
 (*                                                                                    *)
 (* 4) We model Byzantine nodes explicitly by assigning them an algorithm. This        *)
 (* algorithm should allow Byzantine nodes to do the worst possible, but there is      *)
@@ -121,19 +119,21 @@ l0:     while (TRUE) {
 (* Next we define the safety and liveness properties                                  *)
 (**************************************************************************************)
 
-Committed(v) ==
-    /\  v \in vs
+Committed(v, view) == \* view intended to be a sub-DAG of the DAG es
+    /\  v \in view
     /\  Node(v) = Leader(Round(v))
-    /\  \E Bl \in Blocking : Bl \subseteq {Node(pv) : pv \in Parents(v, es)}
+    /\  \E Bl \in Blocking : Bl \subseteq {Node(pv) : pv \in Parents(v, es) \cap view}
     /\  \/  Round(v) = 0
         \/  LeaderVertice(Round(v)-1) \in Children(v, es)
         \/  \E Q \in Quorum : \A n \in Q : LET vn == <<n,Round(v)>> IN
-            /\  vn \in vs
+            /\  vn \in view
             /\  <<vn, LeaderVertice(Round(v)-1)>> \notin es
 
-Safety == \A v1,v2 \in vs :
-    /\  Committed(v1)
-    /\  Committed(v2)
+Safety == \A v1,v2 \in vs : \A view1,view2 \in SUBSET vs :
+    /\  SubDAG(view1, es)
+    /\  SubDAG(view2, es)
+    /\  Committed(v1, view1)
+    /\  Committed(v2, view2)
     /\  Round(v1) <= Round(v2)
     =>  Reachable(v2, v1, es)
 
@@ -142,7 +142,7 @@ Liveness == \A r \in R :
     /\  Leader(r) \notin F
     \* all correct round-(r+1) vertices are created:
     /\  \A n \in N \ F : round[n] > r+1
-    =>  Committed(LeaderVertice(r))
+    =>  Committed(LeaderVertice(r), vs)
 
 (**************************************************************************************)
 (* Finally we make a few auxiliary definitions used for model-checking with TLC       *)
@@ -195,14 +195,14 @@ StateConstraint ==
 \* Some properties we expect to be violated (useful to get the model-checker to print interesting executions):
 
 Falsy1 == \neg (
-    /\ Committed(<<Leader(1),1>>)
+    /\ Committed(<<Leader(1),1>>, vs)
 )
 
 Falsy2 == \neg (
-    /\ Committed(<<Leader(0),0>>)
-    /\ \neg Committed(<<Leader(1),1>>)
-    /\ \neg Committed(<<Leader(2),2>>)
-    /\ Committed(<<Leader(3),3>>)
+    /\ Committed(<<Leader(0),0>>, vs)
+    /\ \neg Committed(<<Leader(1),1>>, vs)
+    /\ Committed(<<Leader(2),2>>, vs)
+    (* /\ Committed(<<Leader(3),3>>, vs) *)
 )
 
 ===========================================================================
