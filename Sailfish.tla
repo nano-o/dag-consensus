@@ -4,7 +4,9 @@
 (* Specification of the Sailfish consensus algorithm at a high level of               *)
 (* abstraction.                                                                       *)
 (*                                                                                    *)
-(* We use a number of abstractions and simplifiying assumptions:                      *)
+(* We use a number of abstractions and simplifiying assumptions in order to expose    *)
+(* the high-level principles of the algorithm clearly and in order to make            *)
+(* model-checking of interesting configuations tractable :                            *)
 (*                                                                                    *)
 (* 1) Nodes read and write a global DAG. Each round, each node gets to see an         *)
 (* arbitrary quorum of vertices from the previous round (and, after GST, this         *)
@@ -34,7 +36,7 @@
 (* This version of the algorithm does not use "no_vote" messages.                     *)
 (**************************************************************************************)
 
-EXTENDS DomainModel, TLC
+EXTENDS DomainModel
 
 CONSTANT
     GST \* the first synchronous round (all later rounds are synchronous)
