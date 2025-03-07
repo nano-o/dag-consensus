@@ -47,13 +47,13 @@ CONSTANT
         es = {}; \* the edges of the DAG
     define {
         LeaderVertice(r) == <<Leader(r), r>>
-        ValidVerticeQuorums(r) ==
-            \* Quorums of valid vertices of round r
+        ValidVerticeQuorums(r) == \* Quorums of valid vertices of round r
             {VQ \in SUBSET vs : LET NQ == {Node(v) : v \in VQ} IN
                 /\  NQ \in Quorum
                 /\  \A v \in VQ :
                     /\  Round(v) = r
-                    \* the leader vertice, if included, must be valid (i.e. if it does not point to the previous leader vertice, then a quorum of votes must justify that):
+                    \* the leader vertice, if included, must be valid (i.e. if it does not point
+                    \* to the previous leader vertice, then a quorum of votes must justify that):
                     /\  \/  \neg (r > 0 /\ v = LeaderVertice(r) /\ <<v, LeaderVertice(r-1)>> \notin es)
                         \/  \E VQ2 \in SUBSET VQ :
                             /\  VQ2 \in Quorum
