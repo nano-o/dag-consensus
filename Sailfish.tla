@@ -12,22 +12,16 @@
 (* arbitrary quorum of vertices from the previous round (and, after GST, this         *)
 (* quorum must include all correct vertices).                                         *)
 (*                                                                                    *)
-(* 2) We do not model timeouts. Instead, before GST, nodes can                        *)
-(* non-deterministically increase their round number (inluding skipping rounds        *)
-(* entirely); after GST, correct nodes can only increment their round number and      *)
-(* only do so after acting upon a superset of the correct vertices of the previous    *)
-(* round.                                                                             *)
-(*                                                                                    *)
-(* 3) We do not model the DAG ordering procedure. Instead, we check that for every    *)
-(* two possible views of the DAG, for every two committed vertices (one in each       *)
-(* view), there is a path in the DAG from the one with the higher round to the one    *)
-(* with the lower round.                                                              *)
+(* 2) We do not model timeouts. Instead, we assume that, every round r after GST,     *)
+(* correct nodes always rbc-deliver all correct vertices of round r-1 before          *)
+(* entering round r. TODO: is this an acceptable assumption? Should it be just f+1    *)
+(* correct vertices?                                                                  *)
 (*                                                                                    *)
 (* 4) We model Byzantine nodes explicitly by assigning them an algorithm. This        *)
-(* algorithm should allow Byzantine nodes to do the worst possible, but there is      *)
-(* no guarantee that this is the case. A more realistic model would allow             *)
-(* Byzantine nodes to send completely arbitrary messages at any time, but this        *)
-(* would make model-checking too hard.                                                *)
+(* algorithm should allow the worst attacks possible, but, while the author thinks    *)
+(* this is true, there is no formal guarantee that this is the case. A more           *)
+(* realistic model would allow Byzantine nodes to send completely arbitrary           *)
+(* messages at any time, but this would make model-checking too hard.                 *)
 (*                                                                                    *)
 (* 5) We do not explicitly model committing based on 2f+1 first RBC messages.         *)
 (*                                                                                    *)
@@ -58,11 +52,13 @@ CONSTANT
                             /\  \A v2 \in VQ2 : <<v2, LeaderVertice(r-1)>> \notin es}
     }
     process (correctNode \in N \ F)
-        variables round = 0; \* current round
+        variables
+            round = 0, \* current round
+            log = <<>>; \* delivered log
     {
 l0:     while (TRUE)
-        either with (v = <<self, round>>) {
-            \* add a new vertex to the DAG and go to the next round
+        with (v = <<self, round>>) {
+            \* complete a round: add the new DAG vertice v, and maybe commit new leader vertice
             vs := vs \cup {v};
             if (round > 0)
             with (VQ \in ValidVerticeQuorums(round-1)) {
@@ -70,21 +66,21 @@ l0:     while (TRUE)
                 when round >= GST => (N \ F) \subseteq {Node(v2) : v2 \in VQ};
                 if (Leader(round) = self) {
                     \* we must either include the previous leader vertice,
-                    \* or a quorum of vertices not voting for the previous leader vertice
+                    \* or we must have seen a quorum of vertices not voting for the previous leader vertice
                     when
                         \/ LeaderVertice(round-1) \in VQ
                         \/ \E Q \in Quorum : \A n \in Q \ {self} : LET vn == <<n,round>> IN
                             /\  vn \in vs
                             /\  <<vn, LeaderVertice(round-1)>> \notin es;
                 };
-                es := es \cup {<<v, pv>> : pv \in VQ}; \* add the edges
+                es := es \cup {<<v, pv>> : pv \in VQ}; \* add v's edges
+                \* possibly commit the leader vertice of round r-2:
+                if (round > 1)
+                    with (votesForLeader = {pv \in VQ : <<pv, LeaderVertice(round-2)>> \in es})
+                    if ({Node(pv) : pv \in votesForLeader} \in Quorum)
+                        log := OrderDAG(es, [i \in 1..(round-2) |-> LeaderVertice(i)])
             };
             round := round + 1
-        }
-        or with (r \in {r \in R : r > round}) {
-            \* go to a higher round
-            when r <= GST; \* from GST onwards, correct nodes do not skip rounds
-            round := r
         }
     }
 (**************************************************************************************)
@@ -129,14 +125,10 @@ Committed(v, view) == \* view intended to be a sub-DAG of the DAG es
             /\  vn \in view
             /\  <<vn, LeaderVertice(Round(v)-1)>> \notin es
 
-Safety == \A v1,v2 \in vs : \A view1,view2 \in SUBSET vs :
-    /\  SubDAG(view1, es)
-    /\  SubDAG(view2, es)
-    /\  Committed(v1, view1)
-    /\  Committed(v2, view2)
-    /\  Round(v1) <= Round(v2)
-    =>  Reachable(v2, v1, es)
+Safety == \A n1,n2 \in N \ F :
+    Compatible(log[n1], log[n2])
 
+\* TODO: update Livenes to use local logs
 Liveness == \A r \in R :
     /\  r >= GST
     /\  Leader(r) \notin F
@@ -194,8 +186,8 @@ StateConstraint ==
 
 \* Some properties we expect to be violated (useful to get the model-checker to print interesting executions):
 
-Falsy1 == \neg (
-    /\ Committed(<<Leader(1),1>>, vs)
+Falsy1 == \neg ( \* we commit something in round 1
+    \E n \in N \ F : log[n] # <<>> /\ Round(log[n][Len(log[n])]) # 0
 )
 
 Falsy2 == \neg (
