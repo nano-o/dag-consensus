@@ -28,7 +28,7 @@
 (* This version of the algorithm does not use "no_vote" messages.                     *)
 (**************************************************************************************)
 
-EXTENDS DomainModel
+EXTENDS DomainModel, TLC
 
 CONSTANT
     GST \* the first synchronous round (all later rounds are synchronous)
@@ -62,8 +62,6 @@ l0:     while (TRUE)
             vs := vs \cup {v};
             if (round > 0)
             with (VQ \in ValidVerticeQuorums(round-1)) {
-                \* from GST onwards, each node receives all correct vertices of the previous round:
-                when round >= GST => (N \ F) \subseteq {Node(v2) : v2 \in VQ};
                 if (Leader(round) = self) {
                     \* we must either include the previous leader vertice,
                     \* or we must have seen a quorum of vertices not voting for the previous leader vertice
@@ -77,7 +75,7 @@ l0:     while (TRUE)
                 \* possibly commit the leader vertice of round r-2:
                 if (round > 1)
                     with (votesForLeader = {pv \in VQ : <<pv, LeaderVertice(round-2)>> \in es})
-                    if ({Node(pv) : pv \in votesForLeader} \in Quorum)
+                    if (IsBlocking({Node(pv) : pv \in votesForLeader}))
                         log := OrderDAG(es, [i \in 1..(round-2) |-> LeaderVertice(i)])
             };
             round := round + 1
@@ -110,6 +108,81 @@ l0:     while (TRUE) {
     }
 }
 *)
+\* BEGIN TRANSLATION (chksum(pcal) = "8671ef6d" /\ chksum(tla) = "64ddeedd")
+\* Label l0 of process correctNode at line 59 col 9 changed to l0_
+VARIABLES vs, es
+
+(* define statement *)
+LeaderVertice(r) == <<Leader(r), r>>
+ValidVerticeQuorums(r) ==
+    {VQ \in SUBSET vs : LET NQ == {Node(v) : v \in VQ} IN
+        /\  NQ \in Quorum
+        /\  \A v \in VQ :
+            /\  Round(v) = r
+
+
+            /\  \/  \neg (r > 0 /\ v = LeaderVertice(r) /\ <<v, LeaderVertice(r-1)>> \notin es)
+                \/  \E VQ2 \in SUBSET VQ :
+                    /\  VQ2 \in Quorum
+                    /\  \A v2 \in VQ2 : <<v2, LeaderVertice(r-1)>> \notin es}
+
+VARIABLES round, log, round_
+
+vars == << vs, es, round, log, round_ >>
+
+ProcSet == (N \ F) \cup (F)
+
+Init == (* Global variables *)
+        /\ vs = {}
+        /\ es = {}
+        (* Process correctNode *)
+        /\ round = [self \in N \ F |-> 0]
+        /\ log = [self \in N \ F |-> <<>>]
+        (* Process byzantineNode *)
+        /\ round_ = [self \in F |-> 0]
+
+correctNode(self) == /\ LET v == <<self, round[self]>> IN
+                          /\ vs' = (vs \cup {v})
+                          /\ IF round[self] > 0
+                                THEN /\ \E VQ \in ValidVerticeQuorums(round[self]-1):
+                                          /\ IF Leader(round[self]) = self
+                                                THEN /\ \/ LeaderVertice(round[self]-1) \in VQ
+                                                        \/ \E Q \in Quorum : \A n \in Q \ {self} : LET vn == <<n,round[self]>> IN
+                                                            /\  vn \in vs'
+                                                            /\  <<vn, LeaderVertice(round[self]-1)>> \notin es
+                                                ELSE /\ TRUE
+                                          /\ es' = (es \cup {<<v, pv>> : pv \in VQ})
+                                          /\ IF round[self] > 1
+                                                THEN /\ LET votesForLeader == {pv \in VQ : <<pv, LeaderVertice(round[self]-2)>> \in es'} IN
+                                                          IF IsBlocking({Node(pv) : pv \in votesForLeader})
+                                                             THEN /\ log' = [log EXCEPT ![self] = OrderDAG(es', [i \in 1..(round[self]-2) |-> LeaderVertice(i)])]
+                                                             ELSE /\ TRUE
+                                                                  /\ log' = log
+                                                ELSE /\ TRUE
+                                                     /\ log' = log
+                                ELSE /\ TRUE
+                                     /\ UNCHANGED << es, log >>
+                          /\ round' = [round EXCEPT ![self] = round[self] + 1]
+                     /\ UNCHANGED round_
+
+byzantineNode(self) == /\ \/ /\ LET v == <<self, round_[self]>> IN
+                                  /\ vs' = (vs \cup {v})
+                                  /\ IF round_[self] > 0
+                                        THEN /\ \E vq \in ValidVerticeQuorums(round_[self]-1):
+                                                  es' = (es \cup {<<v, pv>> : pv \in vq})
+                                        ELSE /\ TRUE
+                                             /\ es' = es
+                          \/ /\ TRUE
+                             /\ UNCHANGED <<vs, es>>
+                       /\ round_' = [round_ EXCEPT ![self] = round_[self] + 1]
+                       /\ UNCHANGED << round, log >>
+
+Next == (\E self \in N \ F: correctNode(self))
+           \/ (\E self \in F: byzantineNode(self))
+
+Spec == Init /\ [][Next]_vars
+
+\* END TRANSLATION 
 
 (**************************************************************************************)
 (* Next we define the safety and liveness properties                                  *)
@@ -118,7 +191,7 @@ l0:     while (TRUE) {
 Committed(v, view) == \* view intended to be a sub-DAG of the DAG es
     /\  v \in view
     /\  Node(v) = Leader(Round(v))
-    /\  \E Bl \in Blocking : Bl \subseteq {Node(pv) : pv \in Parents(v, es) \cap view}
+    /\  IsBlocking({Node(pv) : pv \in Parents(v, es) \cap view})
     /\  \/  Round(v) = 0
         \/  LeaderVertice(Round(v)-1) \in Children(v, es)
         \/  \E Q \in Quorum : \A n \in Q : LET vn == <<n,Round(v)>> IN
@@ -128,20 +201,18 @@ Committed(v, view) == \* view intended to be a sub-DAG of the DAG es
 Safety == \A n1,n2 \in N \ F :
     Compatible(log[n1], log[n2])
 
-\* TODO: update Livenes to use local logs
-Liveness == \A r \in R :
+Liveness == \A r \in R, n \in N \ F :
     /\  r >= GST
     /\  Leader(r) \notin F
-    \* all correct round-(r+1) vertices are created:
-    /\  \A n \in N \ F : round[n] > r+1
-    =>  Committed(LeaderVertice(r), vs)
+    /\  round[n] >= r+2 \* so we've rbc-delivered votes for round-r vertices
+    =>  LeaderVertice(r) \in SeqToSet(log[n])
 
 (**************************************************************************************)
 (* Finally we make a few auxiliary definitions used for model-checking with TLC       *)
 (**************************************************************************************)
 
 Quorum1 == {Q \in SUBSET N : Cardinality(Q) >= Cardinality(N) - Cardinality(F)}
-Blocking1 == {Q \in SUBSET N : Cardinality(Q) > Cardinality(F)}
+IsBlocking1(S) == Cardinality(S) >= Cardinality(F)+1
 
 \* The round of a node, whether Byzantine or not
 Round_(n) == IF n \in F THEN round_[n] ELSE round[n]
@@ -155,6 +226,12 @@ TypeOK ==
             /\  Round(e[1]) > Round(e[2])
     /\  \A n \in N : Round_(n) \in Nat
 
+(**************************************************************************************)
+(* Synchrony assumptions                                                              *)
+(**************************************************************************************)
+Synchrony ==
+    /\  \A v \in vs : Node(v) \notin F /\ Round(v) > GST => IsBlocking({Node(pv) : pv \in Children(v, es)} \ F)
+    /\  \A r \in R : r > GST /\ (\A n \in N \ F : <<n, r>> \in vs) => IsBlocking({Node(v) : v \in {v \in {<<n, r>> : n \in N \ F} : LeaderVertice(r-1) \in Children(v, es)}} \ F)
 
 (**************************************************************************************)
 (* Sequentialization constraints, which enforce a particular ordering of the          *)
@@ -174,7 +251,7 @@ SeqConstraints(n) ==
 
 SeqNext == (\E self \in N \ F: SeqConstraints(self) /\ correctNode(self))
            \/ (\E self \in F: SeqConstraints(self) /\ byzantineNode(self))
-SeqSpec == Init /\ [][SeqNext]_vars
+SeqSpec == Init /\ [][SeqNext /\ Synchrony]_vars
 
 \* Example assignment of leaders to rounds:
 ModLeader(r) == NodeSeq[(r % Cardinality(N))+1]
@@ -187,7 +264,7 @@ StateConstraint ==
 \* Some properties we expect to be violated (useful to get the model-checker to print interesting executions):
 
 Falsy1 == \neg ( \* we commit something in round 1
-    \E n \in N \ F : log[n] # <<>> /\ Round(log[n][Len(log[n])]) # 0
+    \E n \in N \ F : log[n] # <<>>
 )
 
 Falsy2 == \neg (

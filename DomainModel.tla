@@ -11,7 +11,7 @@ CONSTANTS
 ,   F \* Byzantine nodes
 ,   R \* set of rounds
 ,   Quorum \* The set of quorums (e.g. cardinality >= n-f)
-,   Blocking \* The set of blocking set (e.g. cardinality >= f+1)
+,   IsBlocking(_) \* Whether a set intersects all quorums and has at least one correct node (e.g. cardinality >= f+1)
 ,   Leader(_) \* operator mapping each round to its leader
 
 ASSUME \E n \in R : R = 0..n
@@ -75,6 +75,12 @@ OrderDAG(dag, anchors) ==
         IN
             prefix \o OrderDAG(rest, Tail(anchors))
     ELSE OrderDAG(dag, Tail(anchors))
+
+RECURSIVE
+SeqToSet(_) \* sequence to set
+SeqToSet(S) ==
+    IF S = <<>> THEN {} ELSE
+        {Head(S)} \cup SeqToSet(Tail(S))
 
 (**************************************************************************************)
 (* Other stuff                                                                        *)
