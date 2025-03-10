@@ -16,10 +16,6 @@ CONSTANTS
 
 ASSUME \E n \in R : R = 0..n
 
-(**************************************************************************************)
-(* DAG notions                                                                        *)
-(**************************************************************************************)
-
 \* DAG vertices are just pairs consisting of a node and a round:
 V == N \times R
 Node(v) == v[1]
@@ -51,6 +47,7 @@ Parents(v, digraph) ==
 IsSubDAG(vs, es) == \* vertices vs form a sub-DAG (no missing children) of DAG es
     \A v \in vs : Children(v, es) \subseteq vs
 
+Max(S) == CHOOSE x \in S : \A y \in S : y <= x
 Min(n1,n2) == IF n1 >= n2 THEN n2 ELSE n1
 
 Compatible(s1, s2) == \* whether the sequence s1 is a prefix of the sequence s2, or vice versa
@@ -64,16 +61,17 @@ OrderSet(S) == IF S = {} THEN <<>> ELSE
 
 RECURSIVE OrderDAG(_, _)
 OrderDAG(dag, anchors) ==
+    \* TODO anchors are just the leader vertices
     \* anchors is expected to be a sequence of vertices, each reachable from the next
     IF anchors = <<>> THEN <<>> ELSE
     LET a == Head(anchors) IN
     IF a \in Vertices(dag)
     THEN
-        LET toOrder == Descendants({a}, dag) \cup {a}
+        LET toOrder == Descendants({a}, dag)
             prefix == OrderSet(toOrder)
-            rest == {e \in dag : {e[1],e[2]} \cap toOrder = {}}
+            rest == {e \in dag : {e[1],e[2]} \cap (toOrder \cup {a}) = {}}
         IN
-            prefix \o OrderDAG(rest, Tail(anchors))
+            prefix \o <<a>> \o OrderDAG(rest, Tail(anchors))
     ELSE OrderDAG(dag, Tail(anchors))
 
 RECURSIVE
@@ -87,6 +85,7 @@ SeqToSet(S) ==
 (**************************************************************************************)
 
 \* An arbitrary ordering of the nodes:
+\* CONSTANT NodeSeq
 NodeSeq == OrderSet(N)
 NodeIndex(n) == CHOOSE i \in 1..Cardinality(N) : NodeSeq[i] = n
 
