@@ -66,7 +66,9 @@ RECURSIVE CollectLeaders(_, _, _)
 CollectLeaders(vs, r, dag) == IF vs = {} THEN <<>> ELSE
     LET children == UNION {Children(v, dag) : v \in vs}
     IN  IF LeaderVertice(r) \in vs
-        THEN Append(CollectLeaders(Children(LeaderVertice(r), dag), r-1, dag), LeaderVertice(r))
+        THEN Append(
+            CollectLeaders(Children(LeaderVertice(r), dag), r-1, dag),
+            LeaderVertice(r))
         ELSE CollectLeaders(children, r-1, dag)
 
 RECURSIVE OrderVertices(_, _)
@@ -93,6 +95,13 @@ CommitLeader(v, dag) ==
         es = {}; \* the edges of the DAG
     define {
         dag == <<vs, es>>
+        NoVoteQuorum(r, delivered) ==
+            LET NoVote == {v \in delivered : LeaderVertice(r-1) \notin Children(v, dag)}
+            IN  IsQuorum({Node(v) : v \in NoVote})
+        ValidLeaderVertice(lv, delivered) == LET r == Round(lv) IN
+            \/  r = 1
+            \/  LeaderVertice(r-1) \in Children(lv, dag)
+            \/  NoVoteQuorum(r, delivered)
     }
     process (correctNode \in N \ F)
         variables
@@ -106,23 +115,10 @@ l0:     while (TRUE) { \* keep starting new rounds
                     vs := vs \cup {newV}
                 else with (delivered \in SUBSET {v \in vs : Round(v) = round-1}) {
                     await IsQuorum({Node(v) : v \in delivered});
-                    await \* if delivered, leader vertice must be valid:
-                        \/  LeaderVertice(round-1) \notin delivered
-                        \/  round-1 = 1
-                        \/  LeaderVertice(round-2) \in Children(LeaderVertice(round-1), dag)
-                        \/  LET NoVote == {v \in delivered : LeaderVertice(round-2) \notin Children(v, dag)}
-                            IN  IsQuorum({Node(v) : v \in NoVote});
-                    if (Leader(round) = self) {
-                        \* we must either include the previous leader vertice,
-                        \* or we must witness a quorum of vertices not voting for the previous leader
-                        await
-                            \/ LeaderVertice(round-1) \in delivered
-                            \/ \E Q \in SUBSET delivered :
-                                /\  IsQuorum(Q)
-                                /\  \A n \in Q \ {self} : LET vn == <<n,round>> IN
-                                    /\  vn \in vs
-                                    /\  <<vn, LeaderVertice(round-1)>> \notin es;
-                    };
+                    await LeaderVertice(round-1) \in delivered
+                        => ValidLeaderVertice(LeaderVertice(round-1), delivered);
+                    if (Leader(round) = self)
+                        await ValidLeaderVertice(newV, delivered);
                     vs := vs \cup {newV};
                     es := es \cup {<<newV, pv>> : pv \in delivered};
                     \* commit if there is a quorum of votes for the leader of r-2:
