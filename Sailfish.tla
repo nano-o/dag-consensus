@@ -37,7 +37,7 @@ CONSTANTS
 ,   Leader(_) \* operator mapping each round to its leader
 ,   GST \* the first round in which the system is synchronous
 
-ASSUME \E n \in R : R = 0..n
+ASSUME \E n \in R : R = 1..n \* useful rounds start at 1
 
 (**************************************************************************************)
 (* For our purpose of checking safety and liveness of Sailfish, we do not need to     *)
@@ -96,19 +96,19 @@ CommitLeader(v, dag) ==
     }
     process (correctNode \in N \ F)
         variables
-            round = -1, \* current round; -1 means the node has not started execution
+            round = 0, \* current round; 0 means the node has not started execution
             log = <<>>; \* delivered log
     {
 l0:     while (TRUE) { \* keep starting new rounds
             round := round + 1;
             with (newV = <<self, round>>) {
-                if (round = 0)
+                if (round = 1)
                     vs := vs \cup {newV}
                 else with (delivered \in SUBSET {v \in vs : Round(v) = round-1}) {
                     await IsQuorum({Node(v) : v \in delivered});
                     await \* if delivered, leader vertice must be valid:
                         \/  LeaderVertice(round-1) \notin delivered
-                        \/  round-1 = 0
+                        \/  round-1 = 1
                         \/  LeaderVertice(round-2) \in Children(LeaderVertice(round-1), dag)
                         \/  LET NoVote == {v \in delivered : LeaderVertice(round-2) \notin Children(v, dag)}
                             IN  IsQuorum({Node(v) : v \in NoVote});
@@ -144,13 +144,13 @@ l0:     while (TRUE) { \* keep starting new rounds
 (*     nodes in the same "round-by-round" manner as other nodes.                      *)
 (**************************************************************************************)
     process (byzantineNode \in F)
-        variables round_ = -1;
+        variables round_ = 0;
     {
 l0:     while (TRUE) {
             round_ := round_ + 1;
             \* maybe add a vertices to the DAG:
             either with (newV = <<self, round_>>) {
-                if (round_ = 0)
+                if (round_ = 1)
                     vs := vs \cup {newV}
                 else
                 with (delivered \in SUBSET {v \in vs : Round(v) = round_-1}) {
@@ -187,12 +187,12 @@ Round_(n) == IF n \in F THEN round_[n] ELSE round[n]
 
 \* Basic typing invariant:
 TypeOK ==
-    /\  \A v \in vs : Node(v) \in N /\ Round(v) \in Nat
+    /\  \A v \in vs : Node(v) \in N /\ Round(v) \in Nat /\ Round(v) > 0
     /\  \A e \in es :
             /\  e = <<e[1],e[2]>>
             /\  {e[1], e[2]} \subseteq vs
             /\  Round(e[1]) > Round(e[2])
-    /\  \A n \in N : Round_(n) \in Nat \cup {-1}
+    /\  \A n \in N : Round_(n) \in Nat
 
 (**************************************************************************************)
 (* Synchrony assumption: for each round r from GST onwards, if the leader of r is     *)
@@ -222,7 +222,7 @@ NodeIndexLeaderLast(n, r) == CHOOSE i \in 1..Cardinality(N) : NodeSeqLeaderLast(
 
 SeqConstraints(n) ==
     \* wait for all nodes to be at least in the round:
-    /\ (Round_(n) >= 0 => \A n2 \in N : Round_(n2) >= Round_(n))
+    /\ \A n2 \in N : Round_(n2) >= Round_(n)
     \* wait for all nodes with lower index to leave the round (leader index is always last):
     /\ \A n2 \in N : NodeIndexLeaderLast(n2, Round_(n)) < NodeIndexLeaderLast(n, Round_(n))
         => Round_(n2) > Round_(n)
@@ -239,7 +239,7 @@ SeqSpec == Init /\ [][SeqNext]_vars
 (* Next we define a constraint to stop the model-checker.                             *)
 (**************************************************************************************)
 Max(S) == CHOOSE x \in S : \A y \in S : y <= x
-StateConstraint == \A n \in N : Round_(n) \in -1..Max(R)
+StateConstraint == \A n \in N : Round_(n) \in 0..Max(R)
 
 (**************************************************************************************)
 (* Finally, we give some properties we expect to be violated (useful to get the       *)
