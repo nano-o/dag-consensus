@@ -66,7 +66,7 @@ RECURSIVE CollectLeaders(_, _, _)
 CollectLeaders(vs, r, dag) == IF vs = {} THEN <<>> ELSE
     LET children == UNION {Children(v, dag) : v \in vs}
     IN  IF LeaderVertice(r) \in vs
-        THEN Append(CollectLeaders(children, r-1, dag), LeaderVertice(r))
+        THEN Append(CollectLeaders(Children(LeaderVertice(r), dag), r-1, dag), LeaderVertice(r))
         ELSE CollectLeaders(children, r-1, dag)
 
 RECURSIVE OrderVertices(_, _)
