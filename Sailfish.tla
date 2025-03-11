@@ -111,7 +111,7 @@ l0:     while (TRUE) { \* keep starting new rounds
                         \/  round-1 = 0
                         \/  LeaderVertice(round-2) \in Children(LeaderVertice(round-1), dag)
                         \/  LET NoVote == {v \in delivered : LeaderVertice(round-2) \notin Children(v, dag)}
-                            IN  IsQuorum({Node(v) : v \in NoLeaderVote});
+                            IN  IsQuorum({Node(v) : v \in NoVote});
                     if (Leader(round) = self) {
                         \* we must either include the previous leader vertice,
                         \* or we must witness a quorum of vertices not voting for the previous leader
