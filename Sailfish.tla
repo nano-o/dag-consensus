@@ -1,5 +1,7 @@
 ----------------------------- MODULE Sailfish -----------------------------
 
+\* TODO: add skipping rounds
+
 (**************************************************************************************)
 (* Specification of the signature-free Sailfish consensus algorithm at a high         *)
 (* level of abstraction.                                                              *)
@@ -98,29 +100,32 @@ CommitLeader(v, dag) ==
         NoVoteQuorum(r, delivered) ==
             LET NoVote == {v \in delivered : LeaderVertice(r-1) \notin Children(v, dag)}
             IN  IsQuorum({Node(v) : v \in NoVote})
-        ValidLeaderVertice(lv, delivered) == LET r == Round(lv) IN
-            \/  r = 1
-            \/  LeaderVertice(r-1) \in Children(lv, dag)
-            \/  NoVoteQuorum(r, delivered)
     }
     process (correctNode \in N \ F)
         variables
             round = 0, \* current round; 0 means the node has not started execution
             log = <<>>; \* delivered log
     {
-l0:     while (TRUE) { \* keep starting new rounds
-            round := round + 1;
-            with (newV = <<self, round>>) {
-                if (round = 1)
-                    vs := vs \cup {newV}
-                else with (delivered \in SUBSET {v \in vs : Round(v) = round-1}) {
+l0:     while (TRUE) {
+            if (round = 0) { \* start the first round r=1
+                round := 1;
+                vs := vs \cup {<<self, 1>>}
+            }
+            else { \* start a round r>1
+                with (r \in {r \in R : r > round})
+                with (delivered \in SUBSET {v \in vs : Round(v) = r-1}) {
                     await IsQuorum({Node(v) : v \in delivered});
-                    await LeaderVertice(round-1) \in delivered
-                        => ValidLeaderVertice(LeaderVertice(round-1), delivered);
-                    if (Leader(round) = self)
-                        await ValidLeaderVertice(newV, delivered);
-                    vs := vs \cup {newV};
-                    es := es \cup {<<newV, pv>> : pv \in delivered};
+                    await LeaderVertice(r-1) \in delivered =>
+                            \/ LeaderVertice(r-2) \in Children(LeaderVertice(r-1), dag)
+                            \/ NoVoteQuorum(r-1, delivered);
+                    if (Leader(r) = self)
+                        await   \/ LeaderVertice(r-1) \in delivered
+                                \/ NoVoteQuorum(r, delivered);
+                    round := r;
+                    with (newV = <<self, round>>) {
+                        vs := vs \cup {newV};
+                        es := es \cup {<<newV, pv>> : pv \in delivered};
+                    };
                     \* commit if there is a quorum of votes for the leader of r-2:
                     if (round > 1)
                         with (votesForLeader = {pv \in delivered : <<pv, LeaderVertice(round-2)>> \in es})
@@ -170,9 +175,9 @@ Compatible(s1, s2) == \* whether the sequence s1 is a prefix of the sequence s2,
 
 Agreement == \A n1,n2 \in N \ F : Compatible(log[n1], log[n2])
 
-Liveness == \A r \in R : r >= GST /\ Leader(r) \notin F =>
-    \A n \in N \ F : round[n] >= r+2 =>
-        \E i \in DOMAIN log[n] : log[n][i] = LeaderVertice(r)
+Liveness == \A r \in R : r >= GST /\ Leader(r) \notin F => \E B \in SUBSET (N \ F) :
+    /\  IsBlocking(B)
+    /\ \A n \in B : round[n] >= r+2 => \E i \in DOMAIN log[n] : log[n][i] = LeaderVertice(r)
 
 (**************************************************************************************)
 (* Finally we make a few auxiliary definitions used for model-checking with TLC       *)
@@ -183,7 +188,7 @@ Round_(n) == IF n \in F THEN round_[n] ELSE round[n]
 
 \* Basic typing invariant:
 TypeOK ==
-    /\  \A v \in vs : Node(v) \in N /\ Round(v) \in Nat /\ Round(v) > 0
+    /\  \A v \in vs : Node(v) \in N /\ Round(v) \in Nat \ {0}
     /\  \A e \in es :
             /\  e = <<e[1],e[2]>>
             /\  {e[1], e[2]} \subseteq vs
@@ -192,44 +197,19 @@ TypeOK ==
 
 (**************************************************************************************)
 (* Synchrony assumption: for each round r from GST onwards, if the leader of r is     *)
-(* correct then every correct node votes for the round-r leader vertices in round     *)
+(* correct then every correct node votes for the round-r leader vertex in round       *)
 (* r+1                                                                                *)
 (**************************************************************************************)
-Synchrony == \A r \in R : r >= GST /\ Leader(r) \notin F =>
-    \A n \in N \ F : LET v == <<n, r+1>> IN
-        v \in vs => LeaderVertice(r) \in Children(v, dag)
+Synchrony == \A r \in R : r >= GST /\ Leader(r) \notin F => \A n \in N \ F :
+        LET v == <<n, r+1>>
+        IN  v \in vs => LeaderVertice(r) \in Children(v, dag)
 
 (**************************************************************************************)
-(* Sequentialization constraints, which enforce a particular ordering of the          *)
-(* actions. Because of how actions commute, the set of reachable states remains       *)
-(* unchanged. Essentially, we schedule all nodes "round-by-round" and in              *)
-(* lock-steps, with the leader last. This speeds up model-checking a lot.             *)
-(*                                                                                    *)
-(* Note that we must always schedule the leader last because, because of its          *)
-(* relying on other nodes's vertices, its action does not commute to the left of      *)
-(* the actions of other nodes.                                                        *)
+(* We add the synchrony assumption to the specification                               *)
 (**************************************************************************************)
-
-\* An arbitrary ordering of the nodes, with the round leader last:
-NodeSeqLeaderLast(r) == CHOOSE s \in [1..Cardinality(N) -> N] :
-    /\  s[Cardinality(N)] = Leader(r)
-    /\  \A i,j \in 1..Cardinality(N) : i # j => s[i] # s[j]
-NodeIndexLeaderLast(n, r) == CHOOSE i \in 1..Cardinality(N) : NodeSeqLeaderLast(r)[i] = n
-
-SeqConstraints(n) ==
-    \* wait for all nodes to be at least in the round:
-    /\ \A n2 \in N : Round_(n2) >= Round_(n)
-    \* wait for all nodes with lower index to leave the round (leader index is always last):
-    /\ \A n2 \in N : NodeIndexLeaderLast(n2, Round_(n)) < NodeIndexLeaderLast(n, Round_(n))
-        => Round_(n2) > Round_(n)
-
-(**************************************************************************************)
-(* We add the sequentialization constraints and the synchrony assumption              *)
-(* to the specification                                                               *)
-(**************************************************************************************)
-SeqNext == (\E self \in N \ F: SeqConstraints(self) /\ correctNode(self) /\ Synchrony')
-           \/ (\E self \in F: SeqConstraints(self) /\ byzantineNode(self))
-SeqSpec == Init /\ [][SeqNext]_vars
+SyncNext == (\E self \in N \ F: correctNode(self) /\ Synchrony')
+           \/ (\E self \in F: byzantineNode(self))
+SyncSpec == Init /\ [][SyncNext]_vars
 
 (**************************************************************************************)
 (* Next we define a constraint to stop the model-checker.                             *)

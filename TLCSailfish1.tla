@@ -17,12 +17,12 @@ CONSTANTS
 
 N == {n1,n2,n3}
 F == {n1}
-R == 1..4
+R == 1..5
 IsQuorum(Q) == Q \in {{n1,n3},{n2,n3},{n1,n2,n3}}
 IsBlocking(B) == B \in {{n3},{n1,n3},{n2,n3},{n1,n2,n3}}
-LeaderSchedule == <<n2,n1,n3>>
+LeaderSchedule == <<n1,n2,n3>>
 Leader(r) == LeaderSchedule[((r-1) % Cardinality(N))+1]
-GST == 6
+GST == 1
 
 INSTANCE Sailfish
 
