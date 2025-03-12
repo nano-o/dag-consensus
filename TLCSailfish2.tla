@@ -7,7 +7,7 @@
 
 EXTENDS Integers, FiniteSets
 
-VARIABLES vs, es, round, log, round_
+VARIABLES vs, es, round, log
 
 CONSTANTS
     n1,n2,n3,n4
@@ -17,9 +17,9 @@ F == {n1}
 R == 1..4
 IsQuorum(Q) == Cardinality(Q) >= 3
 IsBlocking(B) == Cardinality(B) >= 2
-LeaderSchedule == <<n2,n1,n3,n4>>
+LeaderSchedule == <<n1,n2,n3,n4>>
 Leader(r) == LeaderSchedule[((r-1) % Cardinality(N))+1]
-GST == 1
+GST == 2
 
 INSTANCE Sailfish
 

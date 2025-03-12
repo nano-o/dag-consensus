@@ -10,20 +10,24 @@
 
 EXTENDS Integers, FiniteSets
 
-VARIABLES vs, es, round, log, round_
+VARIABLES vs, es, round, log
 
 CONSTANTS
     n1,n2,n3
 
 N == {n1,n2,n3}
 F == {n1}
-R == 1..5
+R == 1..4
 IsQuorum(Q) == Q \in {{n1,n3},{n2,n3},{n1,n2,n3}}
 IsBlocking(B) == B \in {{n3},{n1,n3},{n2,n3},{n1,n2,n3}}
 LeaderSchedule == <<n1,n2,n3>>
 Leader(r) == LeaderSchedule[((r-1) % Cardinality(N))+1]
-GST == 1
+GST == 2
 
 INSTANCE Sailfish
+
+Falsy3 == \neg (
+    \E n \in N \ F : \E i \in DOMAIN log[n] : log[n][i] = <<n2,2>>
+)
 
 ===========================================================================

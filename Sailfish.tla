@@ -1,7 +1,5 @@
 ----------------------------- MODULE Sailfish -----------------------------
 
-\* TODO: add skipping rounds
-
 (**************************************************************************************)
 (* Specification of the signature-free Sailfish consensus algorithm at a high         *)
 (* level of abstraction.                                                              *)
@@ -17,11 +15,8 @@
 (* 2) We do not model timeouts. Instead, we assume that, every round r after GST,     *)
 (* each correct node votes for the previous leader.                                   *)
 (*                                                                                    *)
-(* 3) We model Byzantine nodes explicitly by assigning them an algorithm too. This    *)
-(* algorithm should allow the worst attacks possible, but, while the author thinks    *)
-(* this is true, there is no formal guarantee that this is the case. A more           *)
-(* realistic model would allow Byzantine nodes to send completely arbitrary           *)
-(* messages at any time, but this would make model-checking with TLC too hard.        *)
+(* 3) Byzantine nodes are allowed to create new DAG vertices arbitrarily, but only    *)
+(* one per round.                                                                     *)
 (*                                                                                    *)
 (* 4) We do not explicitly model committing based on 2f+1 first RBC messages.         *)
 (*                                                                                    *)
@@ -139,31 +134,26 @@ l0:     while (TRUE) {
 (*     Next comes our model of Byzantine nodes. Because the real protocol             *)
 (*     disseminates DAG vertices using reliable broadcast, Byzantine nodes cannot     *)
 (*     equivocate and cannot deviate much from the protocol (lest their messages      *)
-(*     be ignored). Also note that creating a round-r vertice commutes to the left    *)
-(*     of actions of rounds greater than r and to the right of actions of rounds      *)
-(*     smaller than R, so we can, without loss of generality, schedule Byzantine      *)
-(*     nodes in the same "round-by-round" manner as other nodes.                      *)
+(*     be ignored).                                                                   *)
 (**************************************************************************************)
     process (byzantineNode \in F)
-        variables round_ = 0;
     {
 l0:     while (TRUE) {
-            round_ := round_ + 1;
-            \* maybe add a vertices to the DAG:
-            either with (newV = <<self, round_>>) {
-                if (round_ = 1)
+            with (r \in R)
+            with (newV = <<self, r>>) {
+                when newV \notin vs; \* no equivocation
+                if (r = 1)
                     vs := vs \cup {newV}
                 else
-                with (delivered \in SUBSET {v \in vs : Round(v) = round_-1}) {
-                    await IsQuorum({Node(v) : v \in delivered});
+                with (delivered \in SUBSET {v \in vs : Round(v) = r-1}) {
+                    await IsQuorum({Node(v) : v \in delivered}); \* ignored otherwise
                     vs := vs \cup {newV};
                     es := es \cup {<<newV, pv>> : pv \in delivered}
                 }
-            } or skip;
+            }
         }
     }
-}
-*)
+}*)
 
 (**************************************************************************************)
 (* Next we define the safety and liveness properties                                  *)
@@ -183,9 +173,6 @@ Liveness == \A r \in R : r >= GST /\ Leader(r) \notin F => \E B \in SUBSET (N \ 
 (* Finally we make a few auxiliary definitions used for model-checking with TLC       *)
 (**************************************************************************************)
 
-\* The round of a node, whether Byzantine or not
-Round_(n) == IF n \in F THEN round_[n] ELSE round[n]
-
 \* Basic typing invariant:
 TypeOK ==
     /\  \A v \in vs : Node(v) \in N /\ Round(v) \in Nat \ {0}
@@ -193,7 +180,7 @@ TypeOK ==
             /\  e = <<e[1],e[2]>>
             /\  {e[1], e[2]} \subseteq vs
             /\  Round(e[1]) > Round(e[2])
-    /\  \A n \in N : Round_(n) \in Nat
+    /\  \A n \in N \ F : round[n] \in Nat
 
 (**************************************************************************************)
 (* Synchrony assumption: for each round r from GST onwards, if the leader of r is     *)
@@ -215,7 +202,7 @@ SyncSpec == Init /\ [][SyncNext]_vars
 (* Next we define a constraint to stop the model-checker.                             *)
 (**************************************************************************************)
 Max(S) == CHOOSE x \in S : \A y \in S : y <= x
-StateConstraint == \A n \in N : Round_(n) \in 0..Max(R)
+StateConstraint == \A n \in N \ F : round[n] \in 0..Max(R)
 
 (**************************************************************************************)
 (* Finally, we give some properties we expect to be violated (useful to get the       *)
@@ -223,7 +210,7 @@ StateConstraint == \A n \in N : Round_(n) \in 0..Max(R)
 (**************************************************************************************)
 
 Falsy1 == \neg (
-    \A n \in N : Round_(n) = Max(R)
+    \A n \in N \ F : round[n] = Max(R)
 )
 
 Falsy2 == \neg (
