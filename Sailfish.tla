@@ -92,9 +92,9 @@ CommitLeader(v, dag) ==
         es = {}; \* the edges of the DAG
     define {
         dag == <<vs, es>>
-        NoVoteQuorum(r, delivered) ==
-            LET NoVote == {v \in delivered : LeaderVertice(r-1) \notin Children(v, dag)}
-            IN  IsQuorum({Node(v) : v \in NoVote})
+        NoLeaderVoteQuorum(r, delivered, add) ==
+            LET NoLeaderVote == {v \in delivered : LeaderVertice(r-1) \notin Children(v, dag)}
+            IN  IsQuorum({Node(v) : v \in NoLeaderVote} \cup add)
     }
     process (correctNode \in N \ F)
         variables
@@ -112,10 +112,10 @@ l0:     while (TRUE) {
                     await IsQuorum({Node(v) : v \in delivered});
                     await LeaderVertice(r-1) \in delivered =>
                             \/ LeaderVertice(r-2) \in Children(LeaderVertice(r-1), dag)
-                            \/ NoVoteQuorum(r-1, delivered);
+                            \/ NoLeaderVoteQuorum(r-1, delivered, {});
                     if (Leader(r) = self)
                         await   \/ LeaderVertice(r-1) \in delivered
-                                \/ NoVoteQuorum(r, delivered);
+                                \/ NoLeaderVoteQuorum(r, delivered, {self});
                     round := r;
                     with (newV = <<self, round>>) {
                         vs := vs \cup {newV};
@@ -187,9 +187,14 @@ TypeOK ==
 (* correct then every correct node votes for the round-r leader vertex in round       *)
 (* r+1                                                                                *)
 (**************************************************************************************)
-Synchrony == \A r \in R : r >= GST /\ Leader(r) \notin F => \A n \in N \ F :
+Synchrony == \A r \in R : r >= GST /\ Leader(r) \notin F =>
+    \A n \in N \ F :
         LET v == <<n, r+1>>
-        IN  v \in vs => LeaderVertice(r) \in Children(v, dag)
+        IN  /\  v \in vs
+            /\  \/  r = 1
+                \/  LeaderVertice(r-1) \in Children(LeaderVertice(r), dag)
+                \/  NoLeaderVoteQuorum(r, {v2 \in vs : Round(v2) = r}, {})
+            => LeaderVertice(r) \in Children(v, dag)
 
 (**************************************************************************************)
 (* We add the synchrony assumption to the specification                               *)
