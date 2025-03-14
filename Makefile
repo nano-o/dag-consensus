@@ -13,7 +13,7 @@ $(JAR):
 # Don't redownload
 .PRECIOUS: $(JAR)
 
-%.pdf: %.tla
+%.pdf: %.tla $(JAR)
 	java -cp tla2tools.jar tla2tex.TLA -ps -latexCommand pdflatex $<
 
 trans: $(JAR) $(TLA_SPEC)
