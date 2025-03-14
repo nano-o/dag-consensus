@@ -13,7 +13,7 @@ CONSTANTS
     n1,n2,n3,n4
 
 N == {n1,n2,n3,n4}
-F == {n1}
+F == {}
 R == 1..4
 IsQuorum(Q) == Cardinality(Q) >= 3
 IsBlocking(B) == Cardinality(B) >= 2
@@ -22,5 +22,10 @@ Leader(r) == LeaderSchedule[((r-1) % Cardinality(N))+1]
 GST == 2
 
 INSTANCE Sailfish
+
+Falsy3 == \neg (
+    /\  <<n2,2>> \in vs /\ <<n1,1>> \notin Children(<<n2,2>>,dag) /\ <<n1,1>> \in Children(<<n1,2>>, dag) \cap Children(<<n3,2>>, dag) \cap Children(<<n4,2>>, dag)
+    /\  <<n2,2>> \in Children(<<n1,3>>, dag)
+)
 
 ===========================================================================
