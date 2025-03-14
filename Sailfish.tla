@@ -1,7 +1,7 @@
 ----------------------------- MODULE Sailfish -----------------------------
 
 (**************************************************************************************)
-(* Specification of the signature-free Sailfish consensus algorithm at a high         *)
+(* Specification of the signature-free `^Sailfish++^' consensus algorithm at a high   *)
 (* level of abstraction.                                                              *)
 (*                                                                                    *)
 (* We use a number of abstractions and simplifiying assumptions in order to expose    *)
@@ -165,9 +165,13 @@ Compatible(s1, s2) == \* whether the sequence s1 is a prefix of the sequence s2,
 
 Agreement == \A n1,n2 \in N \ F : Compatible(log[n1], log[n2])
 
-Liveness == \A r \in R : r >= GST /\ Leader(r) \notin F => \E B \in SUBSET (N \ F) :
-    /\  IsBlocking(B)
-    /\ \A n \in B : round[n] >= r+2 => \E i \in DOMAIN log[n] : log[n][i] = LeaderVertice(r)
+\*Liveness == \A r \in R : r >= GST /\ Leader(r) \notin F => \E B \in SUBSET (N \ F) :
+\*    /\  IsBlocking(B)
+\*    /\ \A n \in B : round[n] >= r+2 => \E i \in DOMAIN log[n] : log[n][i] = LeaderVertice(r)
+
+Liveness == \A r \in R : r >= GST /\ Leader(r) \notin F =>
+    \A n \in N \ F : round[n] >= r+2 =>
+        \E i \in DOMAIN log[n] : log[n][i] = LeaderVertice(r)
 
 (**************************************************************************************)
 (* Finally we make a few auxiliary definitions used for model-checking with TLC       *)
@@ -193,7 +197,7 @@ Synchrony == \A r \in R : r >= GST /\ Leader(r) \notin F =>
         IN  /\  v \in vs
             /\  \/  r = 1
                 \/  LeaderVertice(r-1) \in Children(LeaderVertice(r), dag)
-                \/  NoLeaderVoteQuorum(r, {v2 \in vs : Round(v2) = r}, {})
+                \/  NoLeaderVoteQuorum(r, {v2 \in vs : Round(v2) = r+1}, {})
             => LeaderVertice(r) \in Children(v, dag)
 
 (**************************************************************************************)
