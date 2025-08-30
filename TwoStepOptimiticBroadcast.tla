@@ -83,8 +83,10 @@ l0:     while (TRUE) with (v \in V) {
     process (faultyParty \in Faulty) {
         \* faulty parties may send arbitrary messages:
 l1:     while (TRUE)
-        with (v \in V, t \in {"proposal", "echo", "vote", "ready"}, d \in P \ Faulty)
+        with (v \in V, t \in {"proposal", "echo", "vote", "ready"}, d \in P \ Faulty) {
+	    when t = "proposal" => self \in Broadcasters;
             msgs := msgs \cup {[src |-> self, dst |-> d, type |-> t, val |-> v]}
+	}
     }
 }
 *)
@@ -103,6 +105,11 @@ ReadySame == \A m1,m2 \in msgs :
     =>
         m1.val = m2.val
 
+\* to find an execution in which all correct parties deliver:
+Falsy == \neg (
+    \A p \in P \ Faulty : delivered[p] # <<>>
+)
+
 Agreement == \A p1,p2 \in P \ Faulty :
     delivered[p1] # <<>> /\ delivered[p2] # <<>> => delivered[p1] = delivered[p2]
 
@@ -113,9 +120,7 @@ Liveness ==
                 /\ delivered[p] = v))
     /\  [] ((\E p \in P \ Faulty : delivered[p] # <<>>) => \A p \in P \ Faulty : <>(delivered[p] # <<>>))
 
-Symm == Permutations(P \ (Faulty \cup {CHOOSE p \in P \ Faulty : TRUE}))
-
 \* Symmetry specification for the TLC model-checker:
-Symm == Permutations(P \ Broadcasters)
+Symm == Permutations(P \ (Faulty \cup Broadcasters)) \cup Permutations(V)
 
 ============================================================================================

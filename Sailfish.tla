@@ -16,7 +16,7 @@
 (* each correct node votes for the previous leader.                                   *)
 (*                                                                                    *)
 (* 3) Byzantine nodes are allowed to create new DAG vertices arbitrarily, but only    *)
-(* one per round.                                                                     *)
+(* one per node per round.                                                            *)
 (*                                                                                    *)
 (* 4) We do not explicitly model committing based on 2f+1 first RBC messages.         *)
 (*                                                                                    *)
@@ -56,7 +56,7 @@ OrderSet(S) == IF S = {} THEN <<>> ELSE
     LET e == CHOOSE e \in S : TRUE
     IN  Append(OrderSet(S \ {e}), e)
 
-\* NOTE: `CHOOSE' is deterministic in TLA+,
+\* NOTE: in TLA+, `CHOOSE' is deterministic but arbitrary choice,
 \* i.e. `CHOOSE e \in S : TRUE' is always the same `e' if `S' is the same
 
 RECURSIVE CollectLeaders(_, _, _)
@@ -92,8 +92,8 @@ CommitLeader(v, dag) ==
         es = {}; \* the edges of the DAG
     define {
         dag == <<vs, es>>
-        NoLeaderVoteQuorum(r, delivered, add) ==
-            LET NoLeaderVote == {v \in delivered : LeaderVertice(r-1) \notin Children(v, dag)}
+        NoLeaderVoteQuorum(r, deliveredVertices, add) ==
+            LET NoLeaderVote == {v \in deliveredVertices : LeaderVertice(r-1) \notin Children(v, dag)}
             IN  IsQuorum({Node(v) : v \in NoLeaderVote} \cup add)
     }
     process (correctNode \in N \ F)
@@ -108,22 +108,22 @@ l0:     while (TRUE) {
             }
             else { \* start a round r>1
                 with (r \in {r \in R : r > round})
-                with (delivered \in SUBSET {v \in vs : Round(v) = r-1}) {
-                    await IsQuorum({Node(v) : v \in delivered});
-                    await LeaderVertice(r-1) \in delivered =>
+                with (deliveredVertices \in SUBSET {v \in vs : Round(v) = r-1}) {
+                    await IsQuorum({Node(v) : v \in deliveredVertices});
+                    await LeaderVertice(r-1) \in deliveredVertices =>
                             \/ LeaderVertice(r-2) \in Children(LeaderVertice(r-1), dag)
-                            \/ NoLeaderVoteQuorum(r-1, delivered, {});
+                            \/ NoLeaderVoteQuorum(r-1, deliveredVertices, {});
                     if (Leader(r) = self)
-                        await   \/ LeaderVertice(r-1) \in delivered
-                                \/ NoLeaderVoteQuorum(r, delivered, {self});
+                        await   \/ LeaderVertice(r-1) \in deliveredVertices
+                                \/ NoLeaderVoteQuorum(r, deliveredVertices, {self});
                     round := r;
                     with (newV = <<self, round>>) {
                         vs := vs \cup {newV};
-                        es := es \cup {<<newV, pv>> : pv \in delivered};
+                        es := es \cup {<<newV, pv>> : pv \in deliveredVertices};
                     };
                     \* commit if there is a quorum of votes for the leader of r-2:
                     if (round > 1)
-                        with (votesForLeader = {pv \in delivered : <<pv, LeaderVertice(round-2)>> \in es})
+                        with (votesForLeader = {pv \in deliveredVertices : <<pv, LeaderVertice(round-2)>> \in es})
                         if (IsBlocking({Node(pv) : pv \in votesForLeader}))
                             log := CommitLeader(LeaderVertice(round-2), dag)
                 }
@@ -164,10 +164,6 @@ Compatible(s1, s2) == \* whether the sequence s1 is a prefix of the sequence s2,
         \A i \in 1..Min(Len(s1), Len(s2)) : s1[i] = s2[i]
 
 Agreement == \A n1,n2 \in N \ F : Compatible(log[n1], log[n2])
-
-\*Liveness == \A r \in R : r >= GST /\ Leader(r) \notin F => \E B \in SUBSET (N \ F) :
-\*    /\  IsBlocking(B)
-\*    /\ \A n \in B : round[n] >= r+2 => \E i \in DOMAIN log[n] : log[n][i] = LeaderVertice(r)
 
 Liveness == \A r \in R : r >= GST /\ Leader(r) \notin F =>
     \A n \in N \ F : round[n] >= r+2 =>
