@@ -1,14 +1,29 @@
------------------------------ MODULE TwoStepOptimiticBroadcast -----------------------------
+----------------------------- MODULE TwoStepOptimiticBroadcastSafety -----------------------------
+
+(**************************************************************************************)
+(* This is a version of TwoStepOptimiticBroadcast that is optimized for               *)
+(* model-checking safety properties of the protocol.                                  *)
+(*                                                                                    *)
+(* In order to reduce the state-space to explore, we do not model explicitly the      *)
+(* echo, vote, and ready messages of Byzantine parties. Instead, we modify the        *)
+(* threshold guards of honest party transitions such that the new guard is            *)
+(* satisfied iff it is possible to come up with Byzantine messages that will make     *)
+(* the original guard satisfied. For example, if an honest party originally waits     *)
+(* for 2f+1 ready messages, then the new guard is to wait for f+1 messages from       *)
+(* honest parties.                                                                    *)
+(**************************************************************************************)
 
 EXTENDS FiniteSets, Integers, TLC
 
 CONSTANTS
     P \* the set of parties
 ,   Faulty \* the set of faulty parties
+,   Broadcaster
 ,   V \* the set of value that may be broadcast
 
 N == Cardinality(P)
 F == Cardinality(Faulty)
+FNB == Cardinality(Faulty \ {Broadcaster})
 
 ASSUME Faulty \subseteq P /\  N > 3*F
 
@@ -25,7 +40,6 @@ Message ==
 
 (*--algorithm Broadcast {
     variables
-        broadcaster \in P, \* the distinguised broadcaster party; could be faulty or not
         msgs = {}; \* the set of sent messages
     define {
         Msgs(self, v, type) == {m \in msgs : m.type = type /\ m.val = v /\ m.dst = self}
@@ -41,44 +55,44 @@ Message ==
     {
 l0:     while (TRUE) with (v \in V) {
             either { \* send proposal
-                when self = broadcaster;
+                when self = Broadcaster;
                 when \A m \in msgs : \neg (m.src = self /\ m.type = "proposal");
                 with (proposal \in V)
                 SendAll("proposal", proposal)
             }
             or { \* send echo
                 when \A m \in msgs : \neg (m.src = self /\ m.type = "echo");
-                await [src |-> broadcaster, dst |-> self, type |-> "proposal", val |-> v] \in msgs;
+                await [src |-> Broadcaster, dst |-> self, type |-> "proposal", val |-> v] \in msgs;
                 SendAll("echo", v)
             }
             or { \* fast delivery
-                await Cardinality({m \in Echos(self, v) : m.src # broadcaster}) >= CeilDiv(N+2*F-2, 2);
+                await Cardinality({m \in Echos(self, v) : m.src # Broadcaster}) + FNB >= CeilDiv(N+2*F-2, 2);
                 delivered := v
             }
             or { \* send vote
                 when \A m \in msgs : \neg (m.src = self /\ m.type = "vote");
-                await Cardinality({m \in Echos(self, v) : m.src # broadcaster}) >= CeilDiv(N, 2);
+                await Cardinality({m \in Echos(self, v) : m.src # Broadcaster}) + FNB >= CeilDiv(N, 2);
                 SendAll("vote", v)
             }
             or { \* send ready
                 when \A m \in msgs : \neg (m.src = self /\ m.type = "ready");
                 await
-                    \/  Cardinality({m \in Echos(self, v) : m.src # broadcaster}) >= CeilDiv(N+F-1, 2)
-                    \/  Cardinality({m \in Votes(self, v) : m.src # broadcaster}) >= CeilDiv(N+F-1, 2)
-                    \/  Cardinality(Readys(self, v)) >= F+1;
+                    \/  Cardinality({m \in Echos(self, v) : m.src # Broadcaster}) + FNB >= CeilDiv(N+F-1, 2)
+                    \/  Cardinality({m \in Votes(self, v) : m.src # Broadcaster}) + FNB >= CeilDiv(N+F-1, 2)
+                    \/  Cardinality(Readys(self, v)) + F >= F+1;
                 SendAll("ready", v)
             }
             or { \* slow delivery
-                await Cardinality(Readys(self, v)) >= 2*F+1;
+                await Cardinality(Readys(self, v)) + F >= 2*F+1;
                 delivered := v
             }
         }
     }
     process (faultyParty \in Faulty) {
-        \* faulty parties may send arbitrary messages:
+        \* a faulty broadcaster may equivocate on the proposal:
 l1:     while (TRUE)
-        with (v \in V, t \in {"proposal", "echo", "vote", "ready"}, d \in P \ Faulty) {
-            msgs := msgs \cup {[src |-> self, dst |-> d, type |-> t, val |-> v]}
+        with (v \in V, d \in P \ Faulty) {
+            msgs := msgs \cup {[src |-> self, dst |-> d, type |-> "proposal", val |-> v]}
         }
     }
 }
@@ -107,10 +121,13 @@ Agreement == \A p1,p2 \in P \ Faulty :
     delivered[p1] # <<>> /\ delivered[p2] # <<>> => delivered[p1] = delivered[p2]
 
 Liveness ==
-    /\  (broadcaster \notin Faulty => \A p \in P \ Faulty :
+    /\  (Broadcaster \notin Faulty => \A p \in P \ Faulty :
             <>(\E v \in V :
-                /\  [src |-> broadcaster, dst |-> p, type |-> "proposal", val |-> v] \in msgs
+                /\  [src |-> Broadcaster, dst |-> p, type |-> "proposal", val |-> v] \in msgs
                 /\ delivered[p] = v))
     /\  [] ((\E p \in P \ Faulty : delivered[p] # <<>>) => \A p \in P \ Faulty : <>(delivered[p] # <<>>))
+
+\* Symmetry specification for the TLC model-checker:
+Symm == Permutations(P \ (Faulty \cup {Broadcaster})) \cup Permutations(V)
 
 ============================================================================================
