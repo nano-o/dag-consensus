@@ -51,14 +51,21 @@ Round(v) == v[2]
 
 LeaderVertice(r) == <<Leader(r), r>>
 
-RECURSIVE OrderSet(_) \*  arbitrarily order the members of the set S
+(**************************************************************************************)
+(* OrderSet(S) produces an arbitrary (but deterministic) ordering of the set of       *)
+(* elements S (note that, in TLA+, `CHOOSE' is deterministic but arbitrary choice;    *)
+(* i.e., `CHOOSE e \in S : TRUE' is always the same `e' if `S' is the same)           *)
+(**************************************************************************************)
+RECURSIVE OrderSet(_)
 OrderSet(S) == IF S = {} THEN <<>> ELSE
     LET e == CHOOSE e \in S : TRUE
     IN  Append(OrderSet(S \ {e}), e)
 
-\* NOTE: in TLA+, `CHOOSE' is deterministic but arbitrary choice,
-\* i.e. `CHOOSE e \in S : TRUE' is always the same `e' if `S' is the same
-
+(**************************************************************************************)
+(* CollectLeaders(vs, r, dag) expects vs to be a set of round-r vertices and          *)
+(* returns the list of leader vertices, in "leaf to root" order, reachable from vs    *)
+(* in dag.                                                                            *)
+(**************************************************************************************)
 RECURSIVE CollectLeaders(_, _, _)
 CollectLeaders(vs, r, dag) == IF vs = {} THEN <<>> ELSE
     LET children == UNION {Children(v, dag) : v \in vs}
@@ -68,17 +75,25 @@ CollectLeaders(vs, r, dag) == IF vs = {} THEN <<>> ELSE
             LeaderVertice(r))
         ELSE CollectLeaders(children, r-1, dag)
 
+(**************************************************************************************)
+(* OrderVertices(dag, leaderVertices) linearizes the DAG dag by repeatedly            *)
+(* ordering the causal past of each successive leader vertex in leaderVertices        *)
+(**************************************************************************************)
 RECURSIVE OrderVertices(_, _)
 OrderVertices(dag, leaderVertices) ==
     IF leaderVertices = <<>> THEN <<>> ELSE
     LET l == Head(leaderVertices)
         toOrder == Descendants({l}, dag)
-        prefix == OrderSet(toOrder)
+        prefix == OrderSet(toOrder) \* TODO shouldn't we use a topological sort here?
         remainingVertices == Vertices(dag) \ (toOrder \cup {l})
         remainingEdges == {e \in Edges(dag) : {e[1],e[2]} \subseteq remainingVertices}
         remainingDAG == <<remainingVertices, remainingEdges>>
     IN prefix \o <<l>> \o OrderVertices(remainingDAG, Tail(leaderVertices))
 
+(**************************************************************************************)
+(* CommitLeader(v, dag) produces the linearization of the DAG corresponding to        *)
+(* committing leader vertex v                                                         *)
+(**************************************************************************************)
 CommitLeader(v, dag) ==
     LET leaderVertices == CollectLeaders({v}, Round(v), dag)
     IN  OrderVertices(dag, leaderVertices)
