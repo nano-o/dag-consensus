@@ -26,6 +26,7 @@ Round(v) == IF v = <<>> THEN 0 ELSE v[2] \* accomodates <<>> as default value
 LeaderVertex(r) == IF r > 0 THEN <<Leader(r), r>> ELSE <<>>
 IsLeader(v) == LeaderVertex(Round(v)) = v
 Genesis == <<>>
+ASSUME IsLeader(Genesis) \* this should hold
 
 (**************************************************************************************)
 (* OrderSet(S) arbitrarily order the members of the set S.  Note that, in TLA+,       *)
@@ -61,4 +62,6 @@ Linearize(dag, l) == IF Vertices(dag) = {<<>>} THEN <<>> ELSE
         remaining == Vertices(dagOfL) \ Vertices(dagOfPrev)
     IN  Linearize(dagOfPrev, prevL) \o OrderSet(remaining \ {l}) \o <<l>>
 
+Compatible(s1, s2) == \* whether the sequence s1 is a prefix of the sequence s2, or vice versa
+    \A i \in 1..Min({Len(s1), Len(s2)}) : s1[i] = s2[i]
 =========================================================================

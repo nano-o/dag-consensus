@@ -4,6 +4,8 @@ TLC_WORKERS=8
 TLC_OFFHEAP_MEMORY=12G
 TLC_HEAP=4G
 TLA_SPEC?=
+TLA_FILES := $(wildcard *.tla)
+TLA_PDFS := $(TLA_FILES:.tla=.pdf)
 TLC_CFG ?= $(abspath $(basename $(TLA_SPEC))).cfg
 TLC_CMD=java -Xmx${TLC_HEAP} -XX:+UseParallelGC -XX:MaxDirectMemorySize=${TLC_OFFHEAP_MEMORY} \
 	-Dtlc2.tool.fp.FPSet.impl=tlc2.tool.fp.OffHeapDiskFPSet \
@@ -48,6 +50,8 @@ run-tlc: $(JAR) $(TLA_SPEC)
 	fi
 	$(TLC_CMD) $(TLA_SPEC)
 
+pdfs: $(TLA_PDFS)
+
 # prevents TLC from filling your disk:
 run-tlc-diskcap: $(JAR) $(TLA_SPEC)
 	@if [ -z "$(TLA_SPEC)" ]; then \
@@ -63,4 +67,4 @@ block-dag-test: TLA_SPEC=BlockDagTest.tla
 block-dag-test: $(JAR)
 	$(TLC_CMD) $(TLA_SPEC)
 
-.PHONY: sany trans run-tlc block-dag-test run-tlc-diskcap
+.PHONY: sany trans run-tlc pdfs block-dag-test run-tlc-diskcap
