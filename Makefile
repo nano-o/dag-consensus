@@ -13,7 +13,6 @@ TLC_CMD=java -Xmx${TLC_HEAP} -XX:+UseParallelGC -XX:MaxDirectMemorySize=${TLC_OF
 	-jar $(abspath $(JAR)) \
 	-workers ${TLC_WORKERS} \
 	-checkpoint 30 \
-	-deadlock \
 	-noGenerateSpecTE \
 	-config '$(TLC_CFG)'
 
