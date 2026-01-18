@@ -19,7 +19,7 @@ CONSTANTS
 
 ASSUME \E n \in R : R = 1..n \* rounds start at 1; 0 is used as default placeholder
 
-INSTANCE BlockDag
+INSTANCE BlockDag \* Import definitions related to DAGs of blocks
 
 (**************************************************************************************)
 (* Now we specify the algorithm in the PlusCal language.                              *)
@@ -30,8 +30,8 @@ INSTANCE BlockDag
         es = {}; \* the edges of the DAG
     define {
         dag == <<vs, es>>
-        NoLeaderVoteQuorum(r, deliveredVertices, add) ==
-            LET NoLeaderVote == {v \in deliveredVertices : LeaderVertex(r-1) \notin Children(dag, v)}
+        NoLeaderVoteQuorum(r, vertices, add) ==
+            LET NoLeaderVote == {v \in vertices : LeaderVertex(r-1) \notin Children(dag, v)}
             IN  IsQuorum({Node(v) : v \in NoLeaderVote} \cup add)
     }
     process (correctNode \in N \ F)
@@ -63,7 +63,7 @@ l0:     while (TRUE) {
                     \* have evidence it cannot commit:
                     if (Leader(r) = self)
                         await   \/ LeaderVertex(r-1) \in deliveredVertices
-                                \/ NoLeaderVoteQuorum(r, deliveredVertices, {self});
+                                \/ NoLeaderVoteQuorum(r, {v \in vs : Round(v) = r}, {self});
                     \* create a new vertex:
                     with (newV = <<self, r>>) {
                         vs := vs \cup {newV};
@@ -104,6 +104,76 @@ l0:     while (TRUE) {
         }
     }
 }*)
+\* BEGIN TRANSLATION (chksum(pcal) = "c16dfa43" /\ chksum(tla) = "9cdbd4f5")
+\* Label l0 of process correctNode at line 42 col 9 changed to l0_
+VARIABLES vs, es
+
+(* define statement *)
+dag == <<vs, es>>
+NoLeaderVoteQuorum(r, vertices, add) ==
+    LET NoLeaderVote == {v \in vertices : LeaderVertex(r-1) \notin Children(dag, v)}
+    IN  IsQuorum({Node(v) : v \in NoLeaderVote} \cup add)
+
+VARIABLES round, log
+
+vars == << vs, es, round, log >>
+
+ProcSet == (N \ F) \cup (F)
+
+Init == (* Global variables *)
+        /\ vs = {Genesis}
+        /\ es = {}
+        (* Process correctNode *)
+        /\ round = [self \in N \ F |-> 0]
+        /\ log = [self \in N \ F |-> <<>>]
+
+correctNode(self) == IF round[self] = 0
+                        THEN /\ round' = [round EXCEPT ![self] = 1]
+                             /\ vs' = (vs \cup {<<self, 1>>})
+                             /\ es' = (es \cup {<<<<self, 1>>, Genesis>>})
+                             /\ log' = log
+                        ELSE /\ \E r \in {r \in R : r > round[self]}:
+                                  \E deliveredVertices \in SUBSET {v \in vs : Round(v) = r-1}:
+                                    /\ IsQuorum({Node(v) : v \in deliveredVertices})
+                                    /\ r >= GST => (N \ F) \subseteq {Node(v) : v \in deliveredVertices}
+                                    /\ round' = [round EXCEPT ![self] = r]
+                                    /\ LeaderVertex(r-1) \in deliveredVertices =>
+                                         \/ LeaderVertex(r-2) \in Children(dag, LeaderVertex(r-1))
+                                         \/ NoLeaderVoteQuorum(r-1, deliveredVertices, {})
+                                    /\ IF Leader(r) = self
+                                          THEN /\ \/ LeaderVertex(r-1) \in deliveredVertices
+                                                  \/ NoLeaderVoteQuorum(r, {v \in vs : Round(v) = r}, {self})
+                                          ELSE /\ TRUE
+                                    /\ LET newV == <<self, r>> IN
+                                         /\ vs' = (vs \cup {newV})
+                                         /\ es' = (es \cup {<<newV, pv>> : pv \in deliveredVertices})
+                                    /\ IF r > 2
+                                          THEN /\ LET votesForLeader == {pv \in deliveredVertices : <<pv, LeaderVertex(r-2)>> \in es'} IN
+                                                    IF IsQuorum({Node(pv) : pv \in votesForLeader})
+                                                       THEN /\ log' = [log EXCEPT ![self] = Linearize(dag, LeaderVertex(r-2))]
+                                                       ELSE /\ TRUE
+                                                            /\ log' = log
+                                          ELSE /\ TRUE
+                                               /\ log' = log
+
+byzantineNode(self) == /\ \E r \in R:
+                            LET newV == <<self, r>> IN
+                              /\ newV \notin vs
+                              /\ IF r = 1
+                                    THEN /\ vs' = (vs \cup {newV})
+                                         /\ es' = (es \cup {<<newV, Genesis>>})
+                                    ELSE /\ \E delivered \in SUBSET {v \in vs : Round(v) = r-1}:
+                                              /\ IsQuorum({Node(v) : v \in delivered})
+                                              /\ vs' = (vs \cup {newV})
+                                              /\ es' = (es \cup {<<newV, pv>> : pv \in delivered})
+                       /\ UNCHANGED << round, log >>
+
+Next == (\E self \in N \ F: correctNode(self))
+           \/ (\E self \in F: byzantineNode(self))
+
+Spec == Init /\ [][Next]_vars
+
+\* END TRANSLATION 
 
 (**************************************************************************************)
 (* Basic type invariant:                                                              *)

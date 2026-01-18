@@ -17,7 +17,7 @@ CONSTANTS
 
 N == {n1,n2,n3}
 F == {n1}
-R == 1..6
+R == 1..5
 IsQuorum(Q) == Q \in {{n1,n3},{n2,n3},{n1,n2,n3}}
 IsBlocking(B) == B \in {{n3},{n1,n3},{n2,n3},{n1,n2,n3}}
 LeaderSchedule == <<n1,n2,n3>>
@@ -30,6 +30,10 @@ INSTANCE Sailfish
 (* Next we define a constraint to stop the model-checker.                             *)
 (**************************************************************************************)
 StateConstraint == \A n \in N \ F : round[n] \in 0..Max(R)
+
+Done == \A n \in N \ F : round[n] = Max(R)
+Terminate == Done /\ UNCHANGED <<vs, es, round, log>>
+TerminatingSpec == Init /\ [][Next \/ Terminate]_<<vs, es, round, log>>
 
 (**************************************************************************************)
 (* Finally, we give some properties we expect to be violated (useful to get the       *)

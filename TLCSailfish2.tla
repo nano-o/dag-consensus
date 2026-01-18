@@ -26,4 +26,8 @@ INSTANCE Sailfish
 
 StateConstraint == \A n \in N \ F : round[n] \in 0..Max(R)
 
+Done == \A n \in N \ F : round[n] = Max(R)
+Terminate == Done /\ UNCHANGED <<vs, es, round, log>>
+TerminatingSpec == Init /\ [][Next \/ Terminate]_<<vs, es, round, log>>
+
 ===========================================================================
