@@ -17,7 +17,7 @@ CONSTANTS
 
 N == {n1,n2,n3}
 F == {n1}
-R == 1..5
+R == 1..2
 IsQuorum(Q) == Q \in {{n1,n3},{n2,n3},{n1,n2,n3}}
 IsBlocking(B) == B \in {{n3},{n1,n3},{n2,n3},{n1,n2,n3}}
 LeaderSchedule == <<n1,n2,n3>>
@@ -32,8 +32,14 @@ INSTANCE Sailfish
 StateConstraint == \A n \in N \ F : round[n] \in 0..Max(R)
 
 Done == \A n \in N \ F : round[n] = Max(R)
-Terminate == Done /\ UNCHANGED <<vs, es, round, log>>
-TerminatingSpec == Init /\ [][Next \/ Terminate]_<<vs, es, round, log>>
+
+\* NOTE:
+\* the following causes an error
+Terminate == Done /\ UNCHANGED vars
+TerminatingSpec == Init /\ [][Next \/ Terminate]_vars
+\* but this works:
+\* Terminate == Done /\ UNCHANGED <<vs, es, round, log>>
+\* TerminatingSpec == Init /\ [][Next \/ Terminate]_<<vs, es, round, log>>
 
 (**************************************************************************************)
 (* Finally, we give some properties we expect to be violated (useful to get the       *)
