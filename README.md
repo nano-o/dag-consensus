@@ -12,8 +12,6 @@ To check the specification with the TLC model-checker:
 * The specification uses PlusCal, which must be transpiled to TLA+ first. To perform the translation, run `make trans TLA_SPEC=Sailfish.tla` (this will modify `Sailfish.tla` in place).
 * Then you can run the TLC model-checker with `make run-tlc TLA_SPEC=TLCSailfish1.tla`. `TLCSailfish1.tla` imports `Sailfish.tla` and provides concrete definitions for model-checking, and `TLCSailfish1.cfg` specifies what to check.
 
-Note that the run-time of the model-checker should be fairly short. This is because we abstract over many aspects of the protocol (e.g. reliable-broadcast). On a recent desktop machine, it takes about 30 seconds and explores 953,442 distinct states.
-
 ## Specification of the two-step optimistic broadcast protocol
 
 The specification appears in `TwoStepOptimiticBroadcast.tla`.

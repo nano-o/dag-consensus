@@ -1,29 +1,12 @@
 ----------------------------- MODULE Sailfish -----------------------------
 
 (**************************************************************************************)
-(* Specification of the signature-free `^Sailfish++^' consensus algorithm at a high   *)
-(* level of abstraction.                                                              *)
-(*                                                                                    *)
-(* We use a number of abstractions and simplifiying assumptions in order to expose    *)
-(* the high-level principles of the algorithm clearly and in order to make            *)
-(* model-checking of interesting configuations tractable:                             *)
-(*                                                                                    *)
-(* 1) Nodes read and write a global DAG. When a node transitions into a new round,    *)
-(* it is provided with an arbitrary quorum of vertices from the previous round        *)
-(* (except that, after GST, some additional assumptions apply).                       *)
-(*                                                                                    *)
-(* 2) We do not model timeouts. Instead, we assume that, every round r after GST,     *)
-(* each correct node votes for the previous leader.                                   *)
-(*                                                                                    *)
-(* 3) Byzantine nodes are allowed to create new DAG vertices arbitrarily, but only    *)
-(* one per node per round.                                                            *)
-(*                                                                                    *)
-(* 4) We do not explicitly model committing based on 2f+1 first RBC messages.         *)
-(*                                                                                    *)
-(* 5) There are no weak edges.                                                        *)
+(* This is a high-level specification of the Sailfish and Sailfish++ (also called     *)
+(* signature-free Sailfish) algorithms.  At the level of abstraction of this          *)
+(* specification, the differences between the two algorithms are not visible.         *)
 (**************************************************************************************)
 
-EXTENDS Digraph, Integers, FiniteSets, Sequences
+EXTENDS Integers, FiniteSets, Sequences
 
 CONSTANTS
     N \* The set of all nodes
@@ -34,81 +17,21 @@ CONSTANTS
 ,   Leader(_) \* operator mapping each round to its leader
 ,   GST \* the first round in which the system is synchronous
 
-ASSUME \E n \in R : R = 1..n \* useful rounds start at 1
+ASSUME \E n \in R : R = 1..n \* rounds start at 1; 0 is used as default placeholder
 
-(**************************************************************************************)
-(* For our purpose of checking safety and liveness of Sailfish, we do not need to     *)
-(* model blocks of transactions. Instead, DAG vertices just consist of a node and     *)
-(* a round.                                                                           *)
-(**************************************************************************************)
-V == N \times R \* the set of possible DAG vertices
-Node(v) == v[1]
-Round(v) == v[2]
-
-(**************************************************************************************)
-(* Next we define how we order DAG vertices when we commit a leader vertice           *)
-(**************************************************************************************)
-
-LeaderVertice(r) == <<Leader(r), r>>
-
-(**************************************************************************************)
-(* OrderSet(S) produces an arbitrary (but deterministic) ordering of the set of       *)
-(* elements S (note that, in TLA+, `CHOOSE' is deterministic but arbitrary choice;    *)
-(* i.e., `CHOOSE e \in S : TRUE' is always the same `e' if `S' is the same)           *)
-(**************************************************************************************)
-RECURSIVE OrderSet(_)
-OrderSet(S) == IF S = {} THEN <<>> ELSE
-    LET e == CHOOSE e \in S : TRUE
-    IN  Append(OrderSet(S \ {e}), e)
-
-(**************************************************************************************)
-(* CollectLeaders(vs, r, dag) expects vs to be a set of round-r vertices and          *)
-(* returns the list of leader vertices, in "leaf to root" order, reachable from vs    *)
-(* in dag.                                                                            *)
-(**************************************************************************************)
-RECURSIVE CollectLeaders(_, _, _)
-CollectLeaders(vs, r, dag) == IF vs = {} THEN <<>> ELSE
-    LET children == UNION {Children(v, dag) : v \in vs}
-    IN  IF LeaderVertice(r) \in vs
-        THEN Append(
-            CollectLeaders(Children(LeaderVertice(r), dag), r-1, dag),
-            LeaderVertice(r))
-        ELSE CollectLeaders(children, r-1, dag)
-
-(**************************************************************************************)
-(* OrderVertices(dag, leaderVertices) linearizes the DAG dag by repeatedly            *)
-(* ordering the causal past of each successive leader vertex in leaderVertices        *)
-(**************************************************************************************)
-RECURSIVE OrderVertices(_, _)
-OrderVertices(dag, leaderVertices) ==
-    IF leaderVertices = <<>> THEN <<>> ELSE
-    LET l == Head(leaderVertices)
-        toOrder == Descendants({l}, dag)
-        prefix == OrderSet(toOrder) \* TODO shouldn't we use a topological sort here?
-        remainingVertices == Vertices(dag) \ (toOrder \cup {l})
-        remainingEdges == {e \in Edges(dag) : {e[1],e[2]} \subseteq remainingVertices}
-        remainingDAG == <<remainingVertices, remainingEdges>>
-    IN prefix \o <<l>> \o OrderVertices(remainingDAG, Tail(leaderVertices))
-
-(**************************************************************************************)
-(* CommitLeader(v, dag) produces the linearization of the DAG corresponding to        *)
-(* committing leader vertex v                                                         *)
-(**************************************************************************************)
-CommitLeader(v, dag) ==
-    LET leaderVertices == CollectLeaders({v}, Round(v), dag)
-    IN  OrderVertices(dag, leaderVertices)
+INSTANCE BlockDag \* Import definitions related to DAGs of blocks
 
 (**************************************************************************************)
 (* Now we specify the algorithm in the PlusCal language.                              *)
 (**************************************************************************************)
 (*--algorithm Sailfish {
     variables
-        vs = {}, \* the vertices of the DAG
+        vs = {Genesis}, \* the vertices of the DAG
         es = {}; \* the edges of the DAG
     define {
         dag == <<vs, es>>
-        NoLeaderVoteQuorum(r, deliveredVertices, add) ==
-            LET NoLeaderVote == {v \in deliveredVertices : LeaderVertice(r-1) \notin Children(v, dag)}
+        NoLeaderVoteQuorum(r, vertices, add) ==
+            LET NoLeaderVote == {v \in vertices : LeaderVertex(r-1) \notin Children(dag, v)}
             IN  IsQuorum({Node(v) : v \in NoLeaderVote} \cup add)
     }
     process (correctNode \in N \ F)
@@ -119,28 +42,38 @@ CommitLeader(v, dag) ==
 l0:     while (TRUE) {
             if (round = 0) { \* start the first round r=1
                 round := 1;
-                vs := vs \cup {<<self, 1>>}
+                vs := vs \cup {<<self, 1>>};
+                es := es \cup {<<<<self, 1>>, Genesis>>}
             }
             else { \* start a round r>1
                 with (r \in {r \in R : r > round})
                 with (deliveredVertices \in SUBSET {v \in vs : Round(v) = r-1}) {
+                    \* we enter a round only if we have a quorum of vertices:
                     await IsQuorum({Node(v) : v \in deliveredVertices});
-                    await LeaderVertice(r-1) \in deliveredVertices =>
-                            \/ LeaderVertice(r-2) \in Children(LeaderVertice(r-1), dag)
-                            \/ NoLeaderVoteQuorum(r-1, deliveredVertices, {});
-                    if (Leader(r) = self)
-                        await   \/ LeaderVertice(r-1) \in deliveredVertices
-                                \/ NoLeaderVoteQuorum(r, deliveredVertices, {self});
+                    \* if this is after GST, we must have all correct vertices:
+                    await r >= GST => (N \ F) \subseteq {Node(v) : v \in deliveredVertices};
+                    \* enter round r:
                     round := r;
-                    with (newV = <<self, round>>) {
+                    \* if the r-1 leader does not reference the r-2 leader,
+                    \* then we must be sure the r-2 leader cannot commit:
+                    await LeaderVertex(r-1) \in deliveredVertices =>
+                            \/ LeaderVertex(r-2) \in Children(dag, LeaderVertex(r-1))
+                            \/ NoLeaderVoteQuorum(r-1, deliveredVertices, {});
+                    \* if we are the leader, then we must include the r-1 leader or
+                    \* have evidence it cannot commit:
+                    if (Leader(r) = self)
+                        await   \/ LeaderVertex(r-1) \in deliveredVertices
+                                \/ NoLeaderVoteQuorum(r, {v \in vs : Round(v) = r}, {self});
+                    \* create a new vertex:
+                    with (newV = <<self, r>>) {
                         vs := vs \cup {newV};
                         es := es \cup {<<newV, pv>> : pv \in deliveredVertices};
                     };
                     \* commit if there is a quorum of votes for the leader of r-2:
-                    if (round > 1)
-                        with (votesForLeader = {pv \in deliveredVertices : <<pv, LeaderVertice(round-2)>> \in es})
-                        if (IsBlocking({Node(pv) : pv \in votesForLeader}))
-                            log := CommitLeader(LeaderVertice(round-2), dag)
+                    if (r > 2)
+                        with (votesForLeader = {pv \in deliveredVertices : <<pv, LeaderVertex(r-2)>> \in es})
+                        if (IsQuorum({Node(pv) : pv \in votesForLeader}))
+                            log := Linearize(dag, LeaderVertex(r-2))
                 }
             }
         }
@@ -157,8 +90,10 @@ l0:     while (TRUE) {
             with (r \in R)
             with (newV = <<self, r>>) {
                 when newV \notin vs; \* no equivocation
-                if (r = 1)
-                    vs := vs \cup {newV}
+                if (r = 1) {
+                    vs := vs \cup {newV};
+                    es := es \cup {<<newV, Genesis>>}
+                }
                 else
                 with (delivered \in SUBSET {v \in vs : Round(v) = r-1}) {
                     await IsQuorum({Node(v) : v \in delivered}); \* ignored otherwise
@@ -169,72 +104,97 @@ l0:     while (TRUE) {
         }
     }
 }*)
+\* BEGIN TRANSLATION (chksum(pcal) = "c16dfa43" /\ chksum(tla) = "9cdbd4f5")
+\* Label l0 of process correctNode at line 42 col 9 changed to l0_
+VARIABLES vs, es
+
+(* define statement *)
+dag == <<vs, es>>
+NoLeaderVoteQuorum(r, vertices, add) ==
+    LET NoLeaderVote == {v \in vertices : LeaderVertex(r-1) \notin Children(dag, v)}
+    IN  IsQuorum({Node(v) : v \in NoLeaderVote} \cup add)
+
+VARIABLES round, log
+
+vars == << vs, es, round, log >>
+
+ProcSet == (N \ F) \cup (F)
+
+Init == (* Global variables *)
+        /\ vs = {Genesis}
+        /\ es = {}
+        (* Process correctNode *)
+        /\ round = [self \in N \ F |-> 0]
+        /\ log = [self \in N \ F |-> <<>>]
+
+correctNode(self) == IF round[self] = 0
+                        THEN /\ round' = [round EXCEPT ![self] = 1]
+                             /\ vs' = (vs \cup {<<self, 1>>})
+                             /\ es' = (es \cup {<<<<self, 1>>, Genesis>>})
+                             /\ log' = log
+                        ELSE /\ \E r \in {r \in R : r > round[self]}:
+                                  \E deliveredVertices \in SUBSET {v \in vs : Round(v) = r-1}:
+                                    /\ IsQuorum({Node(v) : v \in deliveredVertices})
+                                    /\ r >= GST => (N \ F) \subseteq {Node(v) : v \in deliveredVertices}
+                                    /\ round' = [round EXCEPT ![self] = r]
+                                    /\ LeaderVertex(r-1) \in deliveredVertices =>
+                                         \/ LeaderVertex(r-2) \in Children(dag, LeaderVertex(r-1))
+                                         \/ NoLeaderVoteQuorum(r-1, deliveredVertices, {})
+                                    /\ IF Leader(r) = self
+                                          THEN /\ \/ LeaderVertex(r-1) \in deliveredVertices
+                                                  \/ NoLeaderVoteQuorum(r, {v \in vs : Round(v) = r}, {self})
+                                          ELSE /\ TRUE
+                                    /\ LET newV == <<self, r>> IN
+                                         /\ vs' = (vs \cup {newV})
+                                         /\ es' = (es \cup {<<newV, pv>> : pv \in deliveredVertices})
+                                    /\ IF r > 2
+                                          THEN /\ LET votesForLeader == {pv \in deliveredVertices : <<pv, LeaderVertex(r-2)>> \in es'} IN
+                                                    IF IsQuorum({Node(pv) : pv \in votesForLeader})
+                                                       THEN /\ log' = [log EXCEPT ![self] = Linearize(dag, LeaderVertex(r-2))]
+                                                       ELSE /\ TRUE
+                                                            /\ log' = log
+                                          ELSE /\ TRUE
+                                               /\ log' = log
+
+byzantineNode(self) == /\ \E r \in R:
+                            LET newV == <<self, r>> IN
+                              /\ newV \notin vs
+                              /\ IF r = 1
+                                    THEN /\ vs' = (vs \cup {newV})
+                                         /\ es' = (es \cup {<<newV, Genesis>>})
+                                    ELSE /\ \E delivered \in SUBSET {v \in vs : Round(v) = r-1}:
+                                              /\ IsQuorum({Node(v) : v \in delivered})
+                                              /\ vs' = (vs \cup {newV})
+                                              /\ es' = (es \cup {<<newV, pv>> : pv \in delivered})
+                       /\ UNCHANGED << round, log >>
+
+Next == (\E self \in N \ F: correctNode(self))
+           \/ (\E self \in F: byzantineNode(self))
+
+Spec == Init /\ [][Next]_vars
+
+\* END TRANSLATION 
+
+(**************************************************************************************)
+(* Basic type invariant:                                                              *)
+(**************************************************************************************)
+TypeOK ==
+    /\  \A v \in vs \ {<<>>} : 
+        /\  Node(v) \in N /\ Round(v) \in Nat \ {0}
+        /\  \A c \in Children(dag, v) : Round(c) = Round(v) - 1
+    /\  \A e \in es :
+            /\  e = <<e[1],e[2]>>
+            /\  {e[1], e[2]} \subseteq vs
+    /\  \A n \in N \ F : round[n] \in Nat
 
 (**************************************************************************************)
 (* Next we define the safety and liveness properties                                  *)
 (**************************************************************************************)
 
-Compatible(s1, s2) == \* whether the sequence s1 is a prefix of the sequence s2, or vice versa
-    LET Min(n1,n2) == IF n1 >= n2 THEN n2 ELSE n1 IN
-        \A i \in 1..Min(Len(s1), Len(s2)) : s1[i] = s2[i]
-
 Agreement == \A n1,n2 \in N \ F : Compatible(log[n1], log[n2])
 
 Liveness == \A r \in R : r >= GST /\ Leader(r) \notin F =>
     \A n \in N \ F : round[n] >= r+2 =>
-        \E i \in DOMAIN log[n] : log[n][i] = LeaderVertice(r)
-
-(**************************************************************************************)
-(* Finally we make a few auxiliary definitions used for model-checking with TLC       *)
-(**************************************************************************************)
-
-\* Basic typing invariant:
-TypeOK ==
-    /\  \A v \in vs : Node(v) \in N /\ Round(v) \in Nat \ {0}
-    /\  \A e \in es :
-            /\  e = <<e[1],e[2]>>
-            /\  {e[1], e[2]} \subseteq vs
-            /\  Round(e[1]) > Round(e[2])
-    /\  \A n \in N \ F : round[n] \in Nat
-
-(**************************************************************************************)
-(* Synchrony assumption: for each round r from GST onwards, if the leader of r is     *)
-(* correct then every correct node votes for the round-r leader vertex in round       *)
-(* r+1                                                                                *)
-(**************************************************************************************)
-Synchrony == \A r \in R : r >= GST /\ Leader(r) \notin F =>
-    \A n \in N \ F :
-        LET v == <<n, r+1>>
-        IN  /\  v \in vs
-            /\  \/  r = 1
-                \/  LeaderVertice(r-1) \in Children(LeaderVertice(r), dag)
-                \/  NoLeaderVoteQuorum(r, {v2 \in vs : Round(v2) = r+1}, {})
-            => LeaderVertice(r) \in Children(v, dag)
-
-(**************************************************************************************)
-(* We add the synchrony assumption to the specification                               *)
-(**************************************************************************************)
-SyncNext == (\E self \in N \ F: correctNode(self) /\ Synchrony')
-           \/ (\E self \in F: byzantineNode(self))
-SyncSpec == Init /\ [][SyncNext]_vars
-
-(**************************************************************************************)
-(* Next we define a constraint to stop the model-checker.                             *)
-(**************************************************************************************)
-Max(S) == CHOOSE x \in S : \A y \in S : y <= x
-StateConstraint == \A n \in N \ F : round[n] \in 0..Max(R)
-
-(**************************************************************************************)
-(* Finally, we give some properties we expect to be violated (useful to get the       *)
-(* model-checker to print interesting executions).                                    *)
-(**************************************************************************************)
-
-Falsy1 == \neg (
-    \A n \in N \ F : round[n] = Max(R)
-)
-
-Falsy2 == \neg (
-    \E n \in N \ F : Len(log[n]) > 1
-)
+        \E i \in DOMAIN log[n] : log[n][i] = LeaderVertex(r)
 
 ===========================================================================

@@ -26,7 +26,29 @@ GST == 3
 
 INSTANCE Sailfish
 
-\* can be used to stop the model-checker when the leader vertiex of round 2 is committed
+(**************************************************************************************)
+(* Next we define a constraint to stop the model-checker.                             *)
+(**************************************************************************************)
+StateConstraint == \A n \in N \ F : round[n] \in 0..Max(R)
+
+Done == \A n \in N \ F : round[n] = Max(R)
+Terminate == Done /\ UNCHANGED <<vs, es, round, log>>
+TerminatingSpec == Init /\ [][Next \/ Terminate]_<<vs, es, round, log>>
+
+(**************************************************************************************)
+(* Finally, we give some properties we expect to be violated (useful to get the       *)
+(* model-checker to print interesting executions).                                    *)
+(**************************************************************************************)
+
+Falsy1 == \neg (
+    \A n \in N \ F : round[n] = Max(R)
+)
+
+Falsy2 == \neg (
+    \E n \in N \ F : Len(log[n]) > 1
+)
+
+\* can be used to stop the model-checker when the leader vertex of round 2 is committed
 Falsy3 == \neg (
     \E n \in N \ F : \E i \in DOMAIN log[n] : log[n][i] = <<n2,2>>
 )
