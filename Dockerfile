@@ -1,15 +1,8 @@
 FROM debian:stable-slim
 
 RUN apt-get update && apt-get install -y \
-    openjdk-17-jre \
-    make sudo aptitude wget \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y \
-    texlive \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN apt-get update && apt-get install -y \
+    default-jre-headless \
+    make sudo aptitude wget ca-certificates \
     vim nano \
     && rm -rf /var/lib/apt/lists/*
 
@@ -32,7 +25,6 @@ USER appuser
 CMD ["/bin/bash"]
 
 # To build and save:
-#   docker build . -t giulianolosa/sbc25
-#   docker save -o sbc25.tar giulianolosa/sbc25:latest
-#   gzip sbc25.tar
-
+#   docker build . -t giulianolosa/ccs2025-artifact
+#   docker save -o ccs2025.tar giulianolosa/ccs2025-artifact:latest
+#   gzip ccs2025-artifact.tar
