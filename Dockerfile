@@ -26,5 +26,5 @@ CMD ["/bin/bash"]
 
 # To build and save:
 #   docker build . -t giulianolosa/ccs2025-artifact
-#   docker save -o ccs2025.tar giulianolosa/ccs2025-artifact:latest
-#   gzip ccs2025-artifact.tar
+#   docker save -o ccs2025-docker-image.tar giulianolosa/ccs2025-artifact:latest
+#   gzip ccs2025-docker-image.tar
