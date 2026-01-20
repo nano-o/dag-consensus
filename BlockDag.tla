@@ -49,10 +49,10 @@ PreviousLeader(dag, r) == CHOOSE l \in Vertices(dag) :
             {l2 \in Vertices(dag) : IsLeader(l2) /\ Round(l2) < r}})
 
 (**************************************************************************************)
-(* Linearize a DAG. In a real blockchain we should use a topological ordering, but,   *)
-(* for the purpose of ensuring agreement, an arbitrary ordering (as provided by       *)
-(* OrderSet) is fine. This assume a DAG where all paths end with the Genesis          *)
-(* vertex.                                                                            *)
+(* Linearize a DAG by repeatedly linearizing the causal past of each successive       *)
+(* leader.  In a real blockchain we should use a topological ordering, but, for the   *)
+(* purpose of ensuring agreement, an arbitrary ordering (as provided by OrderSet)     *)
+(* is fine. This assume a DAG where all paths end with the Genesis vertex.            *)
 (**************************************************************************************)
 RECURSIVE Linearize(_, _)
 Linearize(dag, l) == IF Vertices(dag) = {<<>>} THEN <<>> ELSE
